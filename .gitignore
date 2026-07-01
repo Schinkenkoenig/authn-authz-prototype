@@ -1,5 +1,9 @@
 # Worktrees
 .worktrees/
+.claude/worktrees/
+
+# Local Claude Code settings
+.claude/settings.local.json
 
 # .NET
 bin/
