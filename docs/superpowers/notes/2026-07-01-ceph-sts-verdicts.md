@@ -20,24 +20,26 @@
   - `quay.io/ceph/daemon:latest-{reef,quincy}` **fail**: `demo.sh: No such file or directory` — the `ceph/daemon` project dropped demo mode. The separate **`ceph/demo`** repo is the working one and has a **squid** tag.
 - **Squid STS advantage:** unlike Reef, the Squid STS docs **document the inline session `Policy` parameter** ("Policy (String/Optional): An IAM Policy in JSON format") *and* session tags — so the original inline-session-policy design is likely viable (still to be proven empirically below).
 
-## Verdicts (spec §7)
+## Verdicts (spec §7) — PROVEN on Squid
 
-### 1. ID token accepted by STS as WebIdentityToken
-- **Status:** PENDING empirical (Task 3 Step 4).
-- Hypothesis: RGW accepts the Keycloak **ID token** (`aud=webapp`) and validates it against the provider's client-id list.
-- Confirmed prerequisite: the ID token is only issued when the token request includes **`scope=openid`** (verified in Task 1 — ROPC without it returns no `id_token`).
+Spike topology: standalone `ceph/demo:latest-squid` (RGW `172.30.0.10:8080`) + dedicated Keycloak on the same docker network with a **fixed-IP issuer** `http://172.30.0.20:8080/realms/authn-authz` (reachable identically from the host and from the Ceph container on Linux).
 
-### 2. Inline session `Policy` on AssumeRoleWithWebIdentity  ← LOAD-BEARING
-- **Status:** *(preliminary: NOT SUPPORTED)* — the Ceph Reef/Quincy STS docs do **not** document an inline session `Policy` parameter for `AssumeRoleWithWebIdentity`. To be confirmed empirically (Task 3 Step 6): pass `Policy=...` and observe whether scoping is honored.
-- **Impact if confirmed:** the design's "backend builds an inline session policy to narrow to the caller's prefix" does not work. Use the session-tag path (below) instead — this changes the token model (§4) and sub-project 2's policy model.
+### 1. ID token accepted by STS as WebIdentityToken — **PASS** ✅
+- `AssumeRoleWithWebIdentity` accepted the Keycloak **ID token** (`aud=webapp`, `iss=http://172.30.0.20:8080/realms/authn-authz`) and returned temporary credentials.
+- Prerequisite confirmed: the ID token is only issued when the token request includes **`scope=openid`** (ROPC without it returns no `id_token`).
 
-### 3. Session tags / principal tags
-- **Status:** *(preliminary: SUPPORTED)* — Ceph docs: "RGW now supports Session tags that can be passed in the web token to AssumeRoleWithWebIdentity." Tags travel in the JWT under the `https://aws.amazon.com/tags` namespace; Keycloak maps a user attribute → that claim via a protocol mapper.
-- **Implication (the adapted ABAC mechanism):** the caller's allowed prefix is a Keycloak **user attribute** → mapped into the token as an AWS **session tag** → RGW enforces via a permission-policy `Condition` on `aws:PrincipalTag/<key>`. To be proven in Task 3 Step 7.
+### 2. Inline session `Policy` on AssumeRoleWithWebIdentity — **PASS** ✅  ← LOAD-BEARING
+- Squid **honors** the inline session `Policy`. Ground-truth discriminator (both writes target `alice/other/`, differing only by the session policy):
+  - `alice/other/b.txt` written under role-only creds → **PRESENT** (role permits `alice/*`).
+  - `alice/other/e.txt` written under role + inline session policy scoped to `alice/reports/*` → **ABSENT** (denied by the narrower session policy).
+- **Consequence:** the original design stands — the backend brokers STS and attaches an inline session policy to scope to the caller's prefix. **No fallback needed. No design change to §3/§4.**
 
-### 4. OIDC provider trust in dev (JWKS/thumbprint, issuer reachability)
-- **Status:** PENDING empirical (Task 3 Step 2).
-- Concern: the token `iss` (Keycloak's Aspire-mapped URL) must be reachable *from inside the Ceph container* for JWKS validation. Requires Ceph + Keycloak on a shared network with a consistent issuer URL. Record the exact resolution.
+### 3. Session tags / principal tags — SUPPORTED (documented), not exercised in the spike
+- Squid docs document session tags (JWT `https://aws.amazon.com/tags` namespace) as an alternative/complementary ABAC mechanism. Not needed for sub-project 1 (inline session policy suffices). Left for sub-project 2 to exercise if it wants attribute-driven scoping.
 
-## Consequence for the design (if #2 FAIL / #3 PASS hold)
-ABAC shifts from **backend-constructed inline session policy** → **Keycloak-issued session tags + role permission-policy `aws:PrincipalTag` conditions**. RBAC (which role you may assume) is unchanged. This simplifies the API broker (no per-request policy JSON) and moves prefix scoping into Keycloak user attributes + the role policy. **Surface to Nils with empirical proof before finalizing sub-project 2.**
+### 4. OIDC provider trust in dev (JWKS/thumbprint, issuer reachability) — **PASS** ✅
+- RGW accepted an **http** issuer with a **dummy thumbprint** (`ffff…`); provider ARN `arn:aws:iam:::oidc-provider/172.30.0.20:8080/realms/authn-authz`.
+- Issuer consistency solved by using a **fixed docker-network IP as the Keycloak hostname** so the token `iss`, the Ceph provider `Url`, and the host's token-fetch URL are all identical and mutually reachable.
+
+## Consequence for the design
+**None — the original architecture is validated.** Backend = PDP (assume role + inline session policy), Ceph = PEP. RBAC = which role; ABAC = inline session policy (session tags available as a future alternative). Sub-project 2 may proceed on the design as written.
