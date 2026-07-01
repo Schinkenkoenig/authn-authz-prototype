@@ -1,0 +1,38 @@
+# Worktrees
+.worktrees/
+
+# .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+[Dd]ebug/
+[Rr]elease/
+artifacts/
+project.lock.json
+*.nupkg
+
+# Aspire / user secrets
+**/appsettings.*.local.json
+
+# Next.js / Node
+node_modules/
+.next/
+out/
+.turbo/
+npm-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Env / secrets
+.env
+.env.local
+.env*.local
+*.pem
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+*.swp
