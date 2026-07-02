@@ -22,4 +22,20 @@ public class CallerClaimsTests
         Assert.Equal("alice", caller.Name);
         Assert.Contains("reader", caller.Roles);
     }
+
+    [Fact]
+    public void Extracts_attributes_and_storage_grants()
+    {
+        var caller = CallerClaims.FromPrincipal(Principal(
+            new Claim("sub", "bob-sub"),
+            new Claim("preferred_username", "bob"),
+            new Claim("department", "engineering"),
+            new Claim("level", "3"),
+            new Claim("storage_grants", "rw:projects/apollo/"),
+            new Claim("storage_grants", "r:shared/")));
+
+        Assert.Equal("engineering", caller.Attributes["department"]);
+        Assert.Equal("3", caller.Attributes["level"]);
+        Assert.Equal(new[] { "rw:projects/apollo/", "r:shared/" }, caller.StorageGrants);
+    }
 }
