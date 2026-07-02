@@ -1,0 +1,19 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "Federated": [
+          "arn:aws:iam:::oidc-provider/172.30.0.20:8080/realms/authn-authz"
+        ]
+      },
+      "Action": ["sts:AssumeRoleWithWebIdentity"],
+      "Condition": {
+        "StringEquals": {
+          "172.30.0.20:8080/realms/authn-authz:azp": "storage-service"
+        }
+      }
+    }
+  ]
+}
