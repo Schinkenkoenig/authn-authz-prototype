@@ -117,6 +117,8 @@
       "enabled": true,
       "emailVerified": true,
       "email": "alice@example.com",
+      "firstName": "Alice",
+      "lastName": "Finance",
       "credentials": [
         { "type": "password", "value": "alice", "temporary": false }
       ],
@@ -131,6 +133,8 @@
       "enabled": true,
       "emailVerified": true,
       "email": "bob@example.com",
+      "firstName": "Bob",
+      "lastName": "Engineering",
       "credentials": [
         { "type": "password", "value": "bob", "temporary": false }
       ],
@@ -145,6 +149,8 @@
       "enabled": true,
       "emailVerified": true,
       "email": "carol@example.com",
+      "firstName": "Carol",
+      "lastName": "HR",
       "credentials": [
         { "type": "password", "value": "carol", "temporary": false }
       ],
@@ -159,6 +165,8 @@
       "enabled": true,
       "emailVerified": true,
       "email": "dave@example.com",
+      "firstName": "Dave",
+      "lastName": "Admin",
       "credentials": [
         { "type": "password", "value": "dave", "temporary": false }
       ],
@@ -173,6 +181,8 @@
       "enabled": true,
       "emailVerified": true,
       "email": "erin@example.com",
+      "firstName": "Erin",
+      "lastName": "Finance",
       "credentials": [
         { "type": "password", "value": "erin", "temporary": false }
       ],
