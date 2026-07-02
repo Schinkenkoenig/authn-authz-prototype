@@ -25,6 +25,16 @@ builder.Services
 builder.Services.AddAuthorizationBuilder()
     .AddPolicy("authenticated", p => p.RequireAuthenticatedUser());
 
+// The SPA is a separate origin; it sends the access token (Authorization) and the
+// ID token (X-Id-Token). Origins come from config so the orchestrated topology can
+// override the dev default.
+var spaOrigins = builder.Configuration.GetSection("Cors:Origins").Get<string[]>()
+    ?? ["http://localhost:3000"];
+builder.Services.AddCors(o => o.AddPolicy("spa", p => p
+    .WithOrigins(spaOrigins)
+    .WithHeaders("Authorization", "X-Id-Token", "Content-Type")
+    .WithMethods("GET", "POST")));
+
 builder.Services.AddFastEndpoints();
 builder.Services.SwaggerDocument();
 
@@ -43,6 +53,7 @@ using (var scope = app.Services.CreateScope())
     scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.Migrate();
 }
 
+app.UseCors("spa");
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseFastEndpoints();

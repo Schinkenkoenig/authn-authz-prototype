@@ -14,7 +14,11 @@ RGW_ENDPOINT="${RGW_ENDPOINT:-http://172.30.0.10:8080}"
 ISSUER_HOST="${ISSUER_HOST:-172.30.0.20:8080}"           # host:port of Keycloak, used in iss
 ISSUER_URL="http://${ISSUER_HOST}/realms/authn-authz"
 CLIENT_ID="${CLIENT_ID:-webapp}"                          # == ID token aud
-ROLE_NAME="${ROLE_NAME:-DemoReader}"
+# RBAC selects the role (RoleResolver: reader->DemoReader, writer->DemoWriter). In the
+# walking skeleton both carry the same broad permission policy — the per-caller inline
+# session policy is what scopes to a prefix (ABAC). Read-vs-write action semantics are
+# deferred to sub-project 2's real policy model.
+ROLE_NAMES="${ROLE_NAMES:-DemoReader DemoWriter}"
 ADMIN_KEY="${ADMIN_KEY:-demoaccess}"
 ADMIN_SECRET="${ADMIN_SECRET:-demosecret123}"
 POLICY_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -37,13 +41,15 @@ iam iam create-open-id-connect-provider \
   --url "$ISSUER_URL" --client-id-list "$CLIENT_ID" \
   --thumbprint-list ffffffffffffffffffffffffffffffffffffffff >/dev/null 2>&1 || echo "   (provider already exists)"
 
-echo ">> (re)create role ${ROLE_NAME} with trust policy"
-iam iam create-role --role-name "$ROLE_NAME" \
-  --assume-role-policy-document file:///policies/trust-policy.json >/dev/null 2>&1 || echo "   (role already exists)"
+for ROLE_NAME in $ROLE_NAMES; do
+  echo ">> (re)create role ${ROLE_NAME} with trust policy"
+  iam iam create-role --role-name "$ROLE_NAME" \
+    --assume-role-policy-document file:///policies/trust-policy.json >/dev/null 2>&1 || echo "   (role already exists)"
 
-echo ">> attach prefix-scoped permission policy"
-iam iam put-role-policy --role-name "$ROLE_NAME" --policy-name PrefixScoped \
-  --policy-document file:///policies/permission-policy.json >/dev/null
+  echo ">> attach storage permission policy to ${ROLE_NAME}"
+  iam iam put-role-policy --role-name "$ROLE_NAME" --policy-name StorageAccess \
+    --policy-document file:///policies/permission-policy.json >/dev/null
+done
 
 echo ">> NOTE: RGW must be restarted once after enabling STS (docker restart ${CEPH_CONTAINER})"
-echo ">> done. Role ARN: arn:aws:iam:::role/${ROLE_NAME}"
+echo ">> done. Roles: ${ROLE_NAMES// /, } (arn:aws:iam:::role/<name>)"
