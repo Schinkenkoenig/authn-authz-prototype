@@ -16,4 +16,8 @@ public sealed class AuditEntry
 public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
     public DbSet<AuditEntry> AuditEntries => Set<AuditEntry>();
+    public DbSet<RbacUserRoleRow> RbacUserRoles => Set<RbacUserRoleRow>();
+    public DbSet<RbacRolePermissionRow> RbacRolePermissions => Set<RbacRolePermissionRow>();
+    public DbSet<AbacRuleRow> AbacRules => Set<AbacRuleRow>();
+    public DbSet<AclEntryRow> AclEntries => Set<AclEntryRow>();
 }
