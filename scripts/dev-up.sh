@@ -42,12 +42,6 @@ if exists ceph-demo; then docker start ceph-demo >/dev/null; else
     quay.io/ceph/demo:latest-squid >/dev/null
 fi
 
-echo ">> Postgres (pg-spike, localhost:5433)"
-if exists pg-spike; then docker start pg-spike >/dev/null; else
-  docker run -d --name pg-spike -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=appdb \
-    -p 5433:5432 postgres:18.3 >/dev/null
-fi
-
 wait_http() { # url label
   for _ in $(seq 1 60); do
     code=$(curl -s -o /dev/null -w '%{http_code}' "$1" 2>/dev/null || true)
@@ -82,12 +76,12 @@ for _ in $(seq 1 30); do [ -s "$TOKEN_DIR/token" ] && { echo "   first token wri
 
 cat <<EOF
 
->> dev stack up.
+>> infra up (Keycloak + Ceph + web-identity refresher).
    Keycloak : $KC  (realm authn-authz; alice/alice reader, bob/bob writer)
    Ceph RGW : $RGW  (bucket demo; service role arn:aws:iam:::role/DemoService)
-   Postgres : localhost:5433 (db appdb, postgres/postgres)
    Token    : $TOKEN_DIR/token  (refreshed by the webid-refresher sidecar)
 
-   Run the API (service-level IAM via SDK web-identity + app-level authz):
-     scripts/run-api.sh
+   Now start the app tier (Postgres + API + SPA) under Aspire:
+     dotnet run --project src/AppHost
+   then open the Aspire dashboard and the SPA at http://localhost:3000
 EOF
