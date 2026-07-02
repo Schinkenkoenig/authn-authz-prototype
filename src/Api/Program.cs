@@ -57,6 +57,7 @@ builder.Services.SwaggerDocument();
 var ceph = builder.Configuration.GetSection("Ceph").Get<CephSettings>() ?? new CephSettings();
 builder.Services.AddSingleton(ceph);
 builder.Services.AddSingleton<S3Gateway>();
+builder.Services.AddSingleton<Api.Authz.AuthzConfigStore>();
 
 builder.Services.AddDbContext<AppDbContext>(o =>
     o.UseNpgsql(builder.Configuration.GetConnectionString("appdb")));
@@ -65,7 +66,10 @@ var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
 {
-    scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.Migrate();
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    db.Database.Migrate();
+    Api.Authz.AuthzSeeder.Seed(db);
+    app.Services.GetRequiredService<Api.Authz.AuthzConfigStore>().Load(db);
 }
 
 app.UseSerilogRequestLogging();

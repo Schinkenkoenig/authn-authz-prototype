@@ -35,4 +35,14 @@ public sealed class S3Gateway(CephSettings ceph)
         using var reader = new StreamReader(resp.ResponseStream);
         return await reader.ReadToEndAsync(ct);
     }
+
+    public async Task<IReadOnlyList<string>> ListAsync(string prefix, CancellationToken ct)
+    {
+        var resp = await _client.ListObjectsV2Async(new ListObjectsV2Request
+        {
+            BucketName = ceph.Bucket,
+            Prefix = prefix,
+        }, ct);
+        return resp.S3Objects?.Select(o => o.Key).ToList() ?? [];
+    }
 }
