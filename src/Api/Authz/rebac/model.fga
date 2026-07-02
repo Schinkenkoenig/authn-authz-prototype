@@ -1,0 +1,15 @@
+model
+  schema 1.1
+
+type user
+
+type team
+  relations
+    define member: [user]
+
+type prefix
+  relations
+    define parent: [prefix]
+    define owner: [user, team#member]
+    define editor: [user, team#member] or owner or editor from parent
+    define viewer: [user, user:*, team#member] or editor or viewer from parent

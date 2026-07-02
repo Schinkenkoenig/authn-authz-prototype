@@ -1,0 +1,134 @@
+{
+    "schema_version": "1.1",
+    "type_definitions": [
+        {
+            "type": "user"
+        },
+        {
+            "metadata": {
+                "relations": {
+                    "member": {
+                        "directly_related_user_types": [
+                            {
+                                "type": "user"
+                            }
+                        ]
+                    }
+                }
+            },
+            "relations": {
+                "member": {
+                    "this": {}
+                }
+            },
+            "type": "team"
+        },
+        {
+            "metadata": {
+                "relations": {
+                    "editor": {
+                        "directly_related_user_types": [
+                            {
+                                "type": "user"
+                            },
+                            {
+                                "relation": "member",
+                                "type": "team"
+                            }
+                        ]
+                    },
+                    "owner": {
+                        "directly_related_user_types": [
+                            {
+                                "type": "user"
+                            },
+                            {
+                                "relation": "member",
+                                "type": "team"
+                            }
+                        ]
+                    },
+                    "parent": {
+                        "directly_related_user_types": [
+                            {
+                                "type": "prefix"
+                            }
+                        ]
+                    },
+                    "viewer": {
+                        "directly_related_user_types": [
+                            {
+                                "type": "user"
+                            },
+                            {
+                                "type": "user",
+                                "wildcard": {}
+                            },
+                            {
+                                "relation": "member",
+                                "type": "team"
+                            }
+                        ]
+                    }
+                }
+            },
+            "relations": {
+                "editor": {
+                    "union": {
+                        "child": [
+                            {
+                                "this": {}
+                            },
+                            {
+                                "computedUserset": {
+                                    "relation": "owner"
+                                }
+                            },
+                            {
+                                "tupleToUserset": {
+                                    "computedUserset": {
+                                        "relation": "editor"
+                                    },
+                                    "tupleset": {
+                                        "relation": "parent"
+                                    }
+                                }
+                            }
+                        ]
+                    }
+                },
+                "owner": {
+                    "this": {}
+                },
+                "parent": {
+                    "this": {}
+                },
+                "viewer": {
+                    "union": {
+                        "child": [
+                            {
+                                "this": {}
+                            },
+                            {
+                                "computedUserset": {
+                                    "relation": "editor"
+                                }
+                            },
+                            {
+                                "tupleToUserset": {
+                                    "computedUserset": {
+                                        "relation": "viewer"
+                                    },
+                                    "tupleset": {
+                                        "relation": "parent"
+                                    }
+                                }
+                            }
+                        ]
+                    }
+                }
+            },
+            "type": "prefix"
+        }
+    ]
+}
