@@ -3,11 +3,28 @@ using Api.Storage;
 using FastEndpoints;
 using FastEndpoints.Swagger;
 using Microsoft.EntityFrameworkCore;
+using OpenTelemetry.Trace;
 using Scalar.AspNetCore;
+using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Drop the default console provider so Serilog owns stdout; AddServiceDefaults re-adds the
+// OpenTelemetry logging provider below (which exports to the Aspire dashboard).
+builder.Logging.ClearProviders();
+
 builder.AddServiceDefaults();
+
+// Serilog structured logging: pretty console for local, and (writeToProviders) forwarded to
+// the MEL pipeline so ServiceDefaults' OpenTelemetry logging exports it to the Aspire dashboard.
+builder.Services.AddSerilog((_, cfg) => cfg
+    .ReadFrom.Configuration(builder.Configuration)
+    .Enrich.FromLogContext()
+    .WriteTo.Console(), writeToProviders: true);
+
+// Make the AWS SDK calls (STS AssumeRoleWithWebIdentity + S3 PUT/GET) first-class spans so
+// one trace covers request → STS → S3.
+builder.Services.ConfigureOpenTelemetryTracerProvider(t => t.AddAWSInstrumentation());
 
 // Access token (aud=api) authorizes API calls. Realm roles stay nested under the raw
 // `realm_access` claim, so keep raw JWT claim names (MapInboundClaims=false); http
@@ -51,6 +68,7 @@ using (var scope = app.Services.CreateScope())
     scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.Migrate();
 }
 
+app.UseSerilogRequestLogging();
 app.UseCors("spa");
 app.UseAuthentication();
 app.UseAuthorization();
