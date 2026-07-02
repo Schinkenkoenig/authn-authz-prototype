@@ -39,32 +39,33 @@ Built in order; each is its own spec → plan → build cycle.
 
 ## 3. Authorization model (the backbone, established here, deepened in #2)
 
-- **The .NET API is the Policy Decision Point (PDP).** It validates the caller's token, decides *which Ceph IAM role to assume*, and can attach an **inline session policy** at `AssumeRoleWithWebIdentity` time to narrow that role to the caller's allowed prefix(es).
-- **Ceph RGW is the Policy Enforcement Point (PEP).** It enforces the temporary scoped credentials on every S3 operation.
-- **Enforcement topology: backend brokers STS.** The browser never talks to Ceph. The API holds the temporary credentials server-side and proxies all S3 I/O.
-- The three variants map onto one mechanism (fully realized in #2): **RBAC** = which role you may assume; **ABAC / claim-based** = trust-policy conditions + inline session policy / session tags built from Keycloak claims.
+> **Pivoted 2026-07-02** from per-user STS brokering to service-level IAM + application-level authorization, to support multiple storage backends and because Ceph's role-permission-policy actions are not reliably enforced for owner-account roles. History + evidence: STS verdicts note §5–§6. The original per-user model is preserved in git history.
+
+- **The .NET API is both PDP and PEP.** It validates the caller's access token and enforces authorization itself, in application code:
+  - **ABAC / claim-based** — every object key is constructed under the caller's own prefix (derived from identity), so cross-tenant access is impossible by construction.
+  - **RBAC** — capability is decided from the caller's realm roles (e.g. `writer` may write; `reader` is refused by the API, not the backend).
+- **The storage backend is dumb and pluggable** (Ceph RGW today; real S3 / other object stores later). The API authenticates to it at the **service level via IAM** — the AWS SDK's own **web-identity credential provider** (the IRSA / Pod-Identity mechanism), configured purely by env vars. One **service identity** holds broad storage access; there is **no per-user credential brokering** and the browser never talks to storage.
+- The three variants map onto this one place (deepened in #2): all decisions are made by the API from Keycloak claims — **RBAC** = capability, **ABAC / claim-based** = resource scope + attribute conditions. The storage backend only ever sees the service identity.
 
 ---
 
-## 4. Token model (OIDC-spec-compliant split)
+## 4. Token & service-identity model
 
-Two tokens, each doing exactly its spec job. **No multi-valued / fat audience is used.**
+Two **independent** identities, each doing exactly its job. **No multi-valued / fat audience is used for authorization.**
 
-| Token | `aud` | Purpose | Consumer |
-|-------|-------|---------|----------|
-| **Access token** | `api` | *Authorizes* the API call | .NET API validates it as the `Authorization: Bearer` |
-| **ID token** | `webapp` (SPA client id) | *Asserts identity* for federation | Forwarded to Ceph STS as the WebIdentityToken |
+| Token | Client / `aud` | Purpose | Consumer |
+|-------|----------------|---------|----------|
+| **Access token** (user) | `webapp` → `aud=api` (audience mapper) | *Authorizes* the API call | .NET API validates it as the `Authorization: Bearer` |
+| **Service-identity token** | `storage-service` (client-credentials) → `azp=storage-service` | *Authenticates the service* to storage | AWS SDK web-identity provider → `AssumeRoleWithWebIdentity` for the service role |
 
 Flow:
 
-1. SPA performs **Authorization Code + PKCE** against Keycloak (public client `webapp`) and receives both tokens (tokens live in the browser).
-2. SPA calls the API with **`Authorization: Bearer <access_token>`**; API validates `aud=api`.
-3. On storage calls, the SPA **also** sends the **ID token** in a distinct header (`X-Id-Token`). The API forwards *that* to `AssumeRoleWithWebIdentity`.
-4. Ceph's OIDC provider is configured with `client_id = webapp`; it validates the ID token's `aud=webapp` against its `client_ids`.
+1. SPA performs **Authorization Code + PKCE** against Keycloak (public client `webapp`) and receives the user tokens (tokens live in the browser).
+2. SPA calls the API with **`Authorization: Bearer <access_token>`**; API validates `aud=api` (with `MapInboundClaims=false`, realm roles come from the `realm_access` claim). The **ID token is not forwarded** — per-user STS is retired.
+3. The API decides authorization from the caller's claims and performs storage I/O with the **service identity**: the AWS SDK resolves credentials from env vars (`AWS_ROLE_ARN`, `AWS_WEB_IDENTITY_TOKEN_FILE`, `AWS_ENDPOINT_URL_STS`) and assumes the service storage role.
+4. The service-identity token is a **client-credentials** token for `storage-service`; Ceph's OIDC provider trusts it and the service role's trust policy keys on `azp=storage-service` (its `aud` is multi-valued, so `azp` is used). A **refresher sidecar** keeps the token file fresh; the API never fetches it (it only reads the file), mirroring how a pod reads a projected service-account token.
 
-We are **not** using the ID token as an API bearer (the purist anti-pattern): the access token authorizes the API; the ID token travels separately as a federation assertion.
-
-Keycloak needs an **audience mapper** adding `api` to the access token. The SPA client is public; its `client_id` is what Ceph's provider trusts.
+We are **not** using the ID token as an API bearer, and the API does not proxy the user's identity to storage. The **user** authorizes the API; the **service** authenticates to storage. Keycloak needs an **audience mapper** adding `api` to the access token (on `webapp`) and one adding `storage-service` to the service token (on `storage-service`).
 
 ---
 
@@ -74,33 +75,33 @@ All components orchestrated by the **Aspire AppHost** with **ServiceDefaults** a
 
 ### Components
 
-- **Keycloak** — realm **imported from committed source** (JSON). Contains: realm, one **public** SPA client `webapp` (Auth Code + PKCE), the `api` audience mapper, a small number of users, one or two roles.
+- **Keycloak** — realm **imported from committed source** (JSON). Contains: realm, one **public** SPA client `webapp` (Auth Code + PKCE) with the `api` audience mapper, one **confidential service client `storage-service`** (client-credentials, service accounts) with its audience mapper, a small number of users, roles.
 - **Ceph (RGW + STS)** — **pinned image tag** (version is a design decision, not a default). Scripted, reproducible init that:
-  - registers Keycloak as an **OIDC provider** entity (client id `webapp`, thumbprint/JWKS config);
-  - creates one **IAM role** with a trust policy (`Principal: Federated → keycloak-provider`, `Action: sts:AssumeRoleWithWebIdentity`) and a permission policy scoped to a demo bucket/prefix.
+  - registers Keycloak as an **OIDC provider** entity (client ids `webapp`, `storage-service`; thumbprint/JWKS config);
+  - creates one broad **service IAM role** (`DemoService`) whose trust policy keys on `azp=storage-service`. (This role is the *identity vehicle*; authorization is enforced by the API, not by the role's permission policy.)
 - **Postgres** — connection + **one migration** to prove wiring. **No domain tables.**
-- **.NET API** (FastEndpoints) — JWT bearer authn against Keycloak; the two endpoints below. **No CQRS.**
+- **.NET API** (FastEndpoints) — JWT bearer authn against Keycloak; PDP+PEP for authorization; storage I/O via the SDK web-identity service identity; the two endpoints below. **No CQRS.**
+- **Refresher sidecar** — writes a fresh `storage-service` client-credentials token to the shared token file on an interval (IRSA/Pod-Identity stand-in for dev).
 - **Next.js SPA** — `oidc-client-ts` / `react-oidc-context`; tokens in browser; a page showing identity + a button to trigger the storage round-trip through the API.
 
 ### Endpoints (skeleton only)
 
 - `GET /whoami` — returns the validated claims from the access token.
-- `POST /storage/roundtrip` (name TBD in planning) — reads `X-Id-Token`, calls `AssumeRoleWithWebIdentity(idToken, roleArn, inlineSessionPolicy)`, receives temp creds, then **PUT + GET** a small object under the allowed prefix, returning the result.
+- `POST /storage/roundtrip` — the API authorizes the caller (prefix from identity, write capability from role), then **reads** the seeded welcome object and **attempts a write** under the caller's prefix using the **service identity**, returning what was allowed. No token is forwarded to storage.
 
 ### Data flow (the money path)
 
 ```
-Browser (access token + id token)
+Browser (access token in browser)
   │  Authorization: Bearer <access_token>   (aud=api)
-  │  X-Id-Token: <id_token>                 (aud=webapp)
   ▼
-.NET API (validates access token; PDP)
-  │  AssumeRoleWithWebIdentity(id_token, roleArn, inline session policy)
+.NET API  = PDP + PEP
+  │  authorize: prefix = caller identity;  write? = caller role (RBAC)
+  │  storage creds via AWS SDK web-identity provider (env vars) → assume DemoService
   ▼
-Ceph STS ── temp scoped creds ──▶ back to API
-  │
-  ▼
-S3 PUT/GET under allowed prefix  (Ceph RGW = PEP, enforces)
+S3 PUT/GET under the caller's prefix, using the SERVICE identity  (backend = dumb store)
+
+(separately) refresher sidecar ── client-credentials token ──▶ shared token file ──▶ SDK
 ```
 
 ### Observability

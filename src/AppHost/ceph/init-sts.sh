@@ -14,13 +14,10 @@ RGW_ENDPOINT="${RGW_ENDPOINT:-http://172.30.0.10:8080}"
 ISSUER_HOST="${ISSUER_HOST:-172.30.0.20:8080}"           # host:port of Keycloak, used in iss
 ISSUER_URL="http://${ISSUER_HOST}/realms/authn-authz"
 CLIENT_ID="${CLIENT_ID:-webapp}"                          # == ID token aud
-# RBAC: RoleResolver maps realm role -> Ceph IAM role (reader->DemoReader, writer->DemoWriter),
-# which selects the assumed IDENTITY. Both roles carry the SAME broad permission policy: on
-# this owner-account setup the role's permission-policy actions are NOT enforced (owner bypass,
-# see the STS verdicts note). The API's inline SESSION policy is the sole enforcer of BOTH the
-# action set (reader vs writer) and the prefix. The role's broad policy just makes the role a
-# usable identity vehicle.
-ROLE_NAMES="${ROLE_NAMES:-DemoReader DemoWriter DemoService}"
+# One broad SERVICE role. The API assumes this single identity (via the SDK web-identity
+# provider) for all storage I/O; per-user authorization is enforced in the API, not by the
+# role. The role's permission policy is just a broad identity vehicle.
+ROLE_NAMES="${ROLE_NAMES:-DemoService}"
 ADMIN_KEY="${ADMIN_KEY:-demoaccess}"
 ADMIN_SECRET="${ADMIN_SECRET:-demosecret123}"
 POLICY_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -51,16 +48,9 @@ iam iam create-open-id-connect-provider \
   --thumbprint-list ffffffffffffffffffffffffffffffffffffffff >/dev/null 2>&1 \
   || echo "   (provider create failed — check RGW STS config)"
 
-# The user roles (reader/writer) trust the SPA client (aud=webapp); the service role trusts
-# the service client (aud=storage-service). The service identity assumes DemoService; per-user
-# authorization is enforced in the API (app-level), not by these roles.
-trust_for() { case "$1" in
-  DemoService) echo trust-policy-service.json ;;
-  *)           echo trust-policy.json ;;
-esac; }
-
+# The service role trusts the service client (azp=storage-service).
 for ROLE_NAME in $ROLE_NAMES; do
-  TRUST_FILE="$(trust_for "$ROLE_NAME")"
+  TRUST_FILE="trust-policy-service.json"
   echo ">> (re)create role ${ROLE_NAME} (trust: ${TRUST_FILE})"
   iam iam create-role --role-name "$ROLE_NAME" \
     --assume-role-policy-document "file:///policies/${TRUST_FILE}" >/dev/null 2>&1 \
@@ -90,4 +80,4 @@ docker run --rm -i --network "$NET" -v "${SEED_DIR}:/seed:ro" \
 rm -rf "$SEED_DIR"
 
 echo ">> NOTE: RGW must be restarted once after enabling STS (docker restart ${CEPH_CONTAINER})"
-echo ">> done. Roles: ${ROLE_NAMES// /, } (arn:aws:iam:::role/<name>); reader/writer capability is enforced by the API's inline session policy, not the role"
+echo ">> done. Service role: arn:aws:iam:::role/DemoService (assumed by the API via SDK web-identity); per-user authz is enforced in the API"
