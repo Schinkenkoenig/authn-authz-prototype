@@ -12,6 +12,8 @@ Run topology: `scripts/dev-up.sh` (Keycloak 172.30.0.20, Ceph 172.30.0.10, webid
 4. **Scalar** renders (`/scalar/v1` → 200). One trace covering API → STS → S3 is emitted via OTel (AWS instrumentation) to the Aspire dashboard — the visualization is a dashboard check.
 5. **Postgres wiring** — EF migration applied on startup against Aspire's Postgres; audit rows written (one per successful write; confirmed via `SELECT` on `AuditEntries`).
 
+**Reproducibility (Task 3 Step 8) — CONFIRMED cold.** Tore down every container + volume (ceph-demo, kc-spike, webid-refresher, Aspire postgres + its data volume, orphaned keycloak volume), then cold `dev-up.sh` + `dotnet run --project src/AppHost` from scratch. init-sts's ordering works on a virgin RGW: enable STS + create provider/`DemoService` in one pass, then RGW restart (FRESH_CEPH), then refresher's first token. Money-path passed cold: alice read-OK/write-denied, bob read+write-OK. **AWS SDK spans confirmed emitted** (temporary console exporter): `STS.AssumeRoleWithWebIdentity` + S3 `PutObject`/`GetObject` under source `AWSSDK.*` — so instrumentation 1.16.0 does hook AWSSDK v4 and DoD#4's trace is real.
+
 Note on §6 pivot vs original DoD wording: item 3 originally said "AssumeRoleWithWebIdentity with an inline session policy narrowing to the prefix." That per-user mechanism was proven (verdicts §1–§5) then **superseded** — enforcement is now in the API (app-level PDP/PEP) and storage auth is the service identity. See §6 + [[authz-pivot-service-iam]].
 
 ## Pinned Ceph image
