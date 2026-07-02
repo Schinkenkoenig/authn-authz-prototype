@@ -1,36 +1,33 @@
-using Amazon.Runtime;
 using Amazon.S3;
 using Amazon.S3.Model;
 
 namespace Api.Storage;
 
-// Object I/O against Ceph RGW using the temporary, prefix-scoped credentials from
-// the broker. Path-style addressing because RGW is reached by IP, not a vhost.
+// Object I/O against Ceph RGW. Credentials are NOT passed here: the AWS SDK resolves them
+// from the environment via its web-identity provider (AWS_ROLE_ARN + AWS_WEB_IDENTITY_TOKEN_FILE),
+// assuming the broad service role and refreshing automatically. This gateway holds one client
+// with the service identity; per-user authorization is decided by the API before calling in.
+// Path-style addressing because RGW is reached by endpoint/IP, not a vhost.
 public sealed class S3Gateway(CephSettings ceph)
 {
-    AmazonS3Client Client(SessionAWSCredentials creds) =>
-        new(creds, new AmazonS3Config
-        {
-            ServiceURL = ceph.ServiceUrl,
-            ForcePathStyle = true,
-            AuthenticationRegion = ceph.Region,
-        });
-
-    public async Task PutAsync(SessionAWSCredentials creds, string key, string content, CancellationToken ct)
+    readonly AmazonS3Client _client = new(new AmazonS3Config
     {
-        using var s3 = Client(creds);
-        await s3.PutObjectAsync(new PutObjectRequest
+        ServiceURL = ceph.ServiceUrl,
+        ForcePathStyle = true,
+        AuthenticationRegion = ceph.Region,
+    });
+
+    public async Task PutAsync(string key, string content, CancellationToken ct) =>
+        await _client.PutObjectAsync(new PutObjectRequest
         {
             BucketName = ceph.Bucket,
             Key = key,
             ContentBody = content,
         }, ct);
-    }
 
-    public async Task<string> GetAsync(SessionAWSCredentials creds, string key, CancellationToken ct)
+    public async Task<string> GetAsync(string key, CancellationToken ct)
     {
-        using var s3 = Client(creds);
-        using var resp = await s3.GetObjectAsync(new GetObjectRequest
+        using var resp = await _client.GetObjectAsync(new GetObjectRequest
         {
             BucketName = ceph.Bucket,
             Key = key,

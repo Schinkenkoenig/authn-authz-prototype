@@ -6,7 +6,6 @@ import { apiUrl } from "@/auth/oidc";
 
 type WhoAmI = { subject: string; name: string; roles: string[] };
 type StorageDemo = WhoAmI & {
-  roleArn: string;
   prefix: string;
   readKey: string;
   readContent: string;
@@ -36,7 +35,6 @@ export default function Home() {
   }
 
   const access = auth.user?.access_token ?? "";
-  const idToken = auth.user?.id_token ?? "";
 
   async function call<T>(path: string, init: RequestInit, set: (v: T) => void) {
     setError("");
@@ -68,7 +66,7 @@ export default function Home() {
           onClick={() =>
             call<StorageDemo>(
               "/storage/roundtrip",
-              { method: "POST", headers: { Authorization: `Bearer ${access}`, "X-Id-Token": idToken } },
+              { method: "POST", headers: { Authorization: `Bearer ${access}` } },
               setDemo,
             )
           }
@@ -89,12 +87,12 @@ export default function Home() {
       )}
       {demo && (
         <section>
-          <h3>/storage/roundtrip — authz showcase</h3>
+          <h3>/storage/roundtrip — authz showcase (API-enforced)</h3>
           <p style={{ margin: "4px 0" }}>
-            RBAC role: <b>{demo.roles.join(", ")}</b> → <code>{demo.roleArn}</code>
+            RBAC role: <b>{demo.roles.join(", ")}</b> (write capability decided by the API)
           </p>
           <p style={{ margin: "4px 0" }}>
-            ABAC prefix (session-policy scoped): <code>{demo.prefix}</code>
+            ABAC prefix (API-scoped): <code>{demo.prefix}</code>
           </p>
           <p style={{ margin: "8px 0 4px" }}>
             READ <code>{demo.readKey}</code>: <span style={{ color: "#4ade80" }}>allowed</span>

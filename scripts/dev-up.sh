@@ -15,6 +15,7 @@ APPHOST_DIR="$SCRIPT_DIR/../src/AppHost"
 NET=cephnet
 KC=http://172.30.0.20:8080
 RGW=http://172.30.0.10:8080
+TOKEN_DIR="${TOKEN_DIR:-/tmp/webid}"   # shared token file dir (sidecar writes, API reads)
 
 exists() { docker ps -a --format '{{.Names}}' | grep -qx "$1"; }
 
@@ -69,14 +70,24 @@ if [ "$FRESH_CEPH" = true ]; then
   wait_http "$RGW" "Ceph RGW"
 fi
 
+echo ">> web-identity token refresher (IRSA-style sidecar -> $TOKEN_DIR/token)"
+mkdir -p "$TOKEN_DIR"
+docker rm -f webid-refresher >/dev/null 2>&1 || true
+docker run -d --name webid-refresher --network "$NET" \
+  -v "$APPHOST_DIR/ceph/refresh-token.py:/refresh.py:ro" -v "$TOKEN_DIR:/tokens" \
+  -e KC="$KC" -e OUT="/tokens/token" -e SECRET="storage-service-secret" -e INTERVAL=120 \
+  python:3.12-alpine python3 /refresh.py >/dev/null
+# wait for the first token to land
+for _ in $(seq 1 30); do [ -s "$TOKEN_DIR/token" ] && { echo "   first token written"; break; }; sleep 1; done
+
 cat <<EOF
 
 >> dev stack up.
    Keycloak : $KC  (realm authn-authz; alice/alice reader, bob/bob writer)
-   Ceph RGW : $RGW  (bucket demo; role arn:aws:iam:::role/DemoReader)
+   Ceph RGW : $RGW  (bucket demo; service role arn:aws:iam:::role/DemoService)
    Postgres : localhost:5433 (db appdb, postgres/postgres)
+   Token    : $TOKEN_DIR/token  (refreshed by the webid-refresher sidecar)
 
-   Run the API:
-     ASPNETCORE_ENVIRONMENT=Development ASPNETCORE_URLS=http://127.0.0.1:5080 \\
-       dotnet run --project src/Api --no-launch-profile
+   Run the API (service-level IAM via SDK web-identity + app-level authz):
+     scripts/run-api.sh
 EOF
