@@ -42,6 +42,12 @@ if exists ceph-demo; then docker start ceph-demo >/dev/null; else
     quay.io/ceph/demo:latest-squid >/dev/null
 fi
 
+echo ">> OpenFGA (openfga, 172.30.0.30) — in-memory ReBAC engine"
+if exists openfga; then docker start openfga >/dev/null; else
+  docker run -d --name openfga --network "$NET" --ip 172.30.0.30 \
+    openfga/openfga run >/dev/null
+fi
+
 wait_http() { # url label
   for _ in $(seq 1 60); do
     code=$(curl -s -o /dev/null -w '%{http_code}' "$1" 2>/dev/null || true)
@@ -54,6 +60,7 @@ wait_http() { # url label
 echo ">> waiting for services"
 wait_http "$KC/realms/authn-authz/.well-known/openid-configuration" Keycloak
 wait_http "$RGW" "Ceph RGW"
+wait_http "http://172.30.0.30:8080/healthz" OpenFGA
 
 echo ">> configure STS (idempotent)"
 bash "$APPHOST_DIR/ceph/init-sts.sh"
@@ -76,9 +83,10 @@ for _ in $(seq 1 30); do [ -s "$TOKEN_DIR/token" ] && { echo "   first token wri
 
 cat <<EOF
 
->> infra up (Keycloak + Ceph + web-identity refresher).
+>> infra up (Keycloak + Ceph + OpenFGA + web-identity refresher).
    Keycloak : $KC  (realm authn-authz; alice/alice reader, bob/bob writer)
    Ceph RGW : $RGW  (bucket demo; service role arn:aws:iam:::role/DemoService)
+   OpenFGA  : http://172.30.0.30:8080  (in-memory; store+model+tuples provisioned by the API at startup)
    Token    : $TOKEN_DIR/token  (refreshed by the webid-refresher sidecar)
 
    Now start the app tier (Postgres + API + SPA) under Aspire:

@@ -45,6 +45,13 @@ CASES = [
     ("bob",   "acl",    "POST", "/storage/write", {"key": "projects/apollo/a.txt", "content": "x"}, True),
     ("carol", "acl",    "POST", "/storage/read",  {"key": "shared/notes.txt"}, True),  # wildcard read
     ("carol", "acl",    "POST", "/storage/write", {"key": "shared/notes.txt", "content": "x"}, False),
+    # ReBAC (OpenFGA): relationship graph — inheritance + group membership are the character.
+    ("carol", "rebac",  "POST", "/storage/read",  {"key": "projects/apollo/specs/design.md"}, True),        # viewer on projects/ inherited down the hierarchy
+    ("carol", "rebac",  "POST", "/storage/write", {"key": "projects/apollo/a.txt", "content": "x"}, False),  # viewer only, not editor
+    ("bob",   "rebac",  "POST", "/storage/write", {"key": "projects/apollo/a.txt", "content": "x"}, True),   # eng team editor, inherited
+    ("dave",  "rebac",  "POST", "/storage/read",  {"key": "projects/apollo/a.txt"}, False),                 # no grant, not in team
+    ("alice", "rebac",  "POST", "/storage/write", {"key": "projects/apollo/x.txt", "content": "x"}, True),   # owner of apollo => editor
+    ("dave",  "rebac",  "POST", "/storage/read",  {"key": "shared/notes.txt"}, True),                       # public read (user:*)
 ]
 
 fails = 0

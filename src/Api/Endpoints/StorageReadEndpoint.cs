@@ -11,7 +11,7 @@ public sealed record StorageResult(string Paradigm, bool Permit, string Reason, 
 
 // Read is gated by the selected paradigm, then served with the service identity. The paradigm
 // comes from the X-Authz-Paradigm header (default when absent/unknown).
-public sealed class StorageReadEndpoint(AuthzConfigStore store, S3Gateway s3)
+public sealed class StorageReadEndpoint(AuthzConfigStore store, S3Gateway s3, IRebacClient rebac)
     : Endpoint<ReadRequest, StorageResult>
 {
     public override void Configure()
@@ -24,7 +24,7 @@ public sealed class StorageReadEndpoint(AuthzConfigStore store, S3Gateway s3)
     {
         var caller = CallerClaims.FromPrincipal(User);
         var paradigm = AuthzDispatcher.Resolve(HttpContext.Request.Headers["X-Authz-Paradigm"].ToString());
-        var decision = AuthzDispatcher.Decide(paradigm, new AuthzRequest(caller, StorageAction.Read, req.Key), store.Current);
+        var decision = await AuthzDispatcher.DecideAsync(paradigm, new AuthzRequest(caller, StorageAction.Read, req.Key), store.Current, rebac, ct);
 
         if (!decision.Permit)
         {
