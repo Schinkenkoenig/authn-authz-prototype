@@ -1203,7 +1203,10 @@ using FastEndpoints;
 
 namespace Api.Endpoints;
 
-public sealed record ListRequest(string Prefix);
+// GET has no body — FastEndpoints instantiates this and binds from the query string, which needs
+// a settable property (NOT an init-only positional record, which fails to bind at runtime).
+public sealed class ListRequest { public string Prefix { get; set; } = ""; }
+
 public sealed record ListResult(string Paradigm, bool Permit, string Reason, string Prefix, IReadOnlyList<string> Keys);
 
 public sealed class StorageListEndpoint(AuthzConfigStore store, S3Gateway s3)
@@ -1244,6 +1247,28 @@ Expected: build succeeds; unit tests pass.
 git add src/Api/Endpoints/StorageReadEndpoint.cs src/Api/Endpoints/StorageWriteEndpoint.cs src/Api/Endpoints/StorageListEndpoint.cs
 git commit -m "feat: storage read/write/list endpoints gated by selected paradigm"
 ```
+
+- [ ] **Step 7: Smoke-test the FastEndpoints runtime paths early**
+
+The per-task `dotnet build` only catches compile errors; the FE usages here (`Send.ResponseAsync(dto, 403, ct)`, header-selector binding, GET query binding) first execute at runtime. Confirm them now — before more endpoints depend on them — rather than discovering them all at Task 15. Requires the stack + API running (`bash scripts/dev-up.sh`; `dotnet run --project src/AppHost` in another shell; note the API base URL from the Aspire dashboard resource view).
+
+```bash
+source ~/.bash_profile
+KC=http://172.30.0.20:8080/realms/authn-authz/protocol/openid-connect/token
+API=<api-base-url-from-aspire-dashboard>
+BOB=$(curl -s -d client_id=webapp -d grant_type=password -d username=bob -d password=bob -d scope=openid "$KC" | python3 -c "import sys,json;print(json.load(sys.stdin)['access_token'])")
+# permit (bob editor writes projects/apollo/ under rbac) -> 200
+curl -s -o /dev/null -w "write permit -> %{http_code}\n" -X POST "$API/storage/write" -H "Authorization: Bearer $BOB" -H "X-Authz-Paradigm: rbac" -H "Content-Type: application/json" -d '{"key":"projects/apollo/smoke.txt","content":"x"}'
+# deny (bob has no finance write under rbac) -> 403
+curl -s -o /dev/null -w "write deny   -> %{http_code}\n" -X POST "$API/storage/write" -H "Authorization: Bearer $BOB" -H "X-Authz-Paradigm: rbac" -H "Content-Type: application/json" -d '{"key":"finance/smoke.txt","content":"x"}'
+# GET query binding on list -> 200
+curl -s -o /dev/null -w "list        -> %{http_code}\n" "$API/storage/list?prefix=projects/apollo/" -H "Authorization: Bearer $BOB" -H "X-Authz-Paradigm: rbac"
+```
+Expected: `write permit -> 200`, `write deny -> 403`, `list -> 200`. If `list` is not 200, the `ListRequest` query binding is wrong — recheck it is a class with a settable `Prefix` (not a positional record).
+
+(This is an interactive verification, not a commit step.)
+
+Note for the future playground: the SP1 CORS policy only allows the `Authorization`/`Content-Type` request headers. `X-Authz-Paradigm` is server-side only in this spec (verify is curl/python), so no change is needed now — but a browser playground will need it added to the CORS `WithHeaders(...)`.
 
 ---
 
@@ -1458,7 +1483,9 @@ Follows SP1's committed-script verification pattern (real Keycloak tokens, real 
 
 ```bash
 bash scripts/dev-up.sh
-source ~/.bash_profile && dotnet run --project src/AppHost   # in a separate shell; note the API base URL from the Aspire dashboard
+source ~/.bash_profile && dotnet run --project src/AppHost   # in a separate shell
+# Read the API base URL from the Aspire dashboard's resource view (the "api" resource endpoint) —
+# Aspire assigns a dynamic port, so don't assume :5000.
 ```
 
 - [ ] **Step 2: Create `scripts/verify-authz.py`** (set `API` to the API base URL Aspire assigns):
@@ -1549,7 +1576,7 @@ git commit -m "test: scripted end-to-end authz verify across all four paradigms"
 **Files:**
 - Modify: `docs/superpowers/notes/` (add a short SP2 run note) or the existing run doc if one exists.
 
-- [ ] **Step 1: Write `docs/superpowers/notes/2026-07-02-authz-paradigms-run.md`** capturing: how to run (`scripts/dev-up.sh` + `dotnet run --project src/AppHost`), the four paradigms + selector header, the seeded roster/config, and how to run `scripts/verify-authz.py`. Keep it short and factual.
+- [ ] **Step 1: Write `docs/superpowers/notes/2026-07-02-authz-paradigms-run.md`** capturing: how to run (`scripts/dev-up.sh` + `dotnet run --project src/AppHost`; read the API URL from the Aspire dashboard resource view), the four paradigms + the `X-Authz-Paradigm` selector header (default `rbac`), the seeded roster/config, how to run `scripts/verify-authz.py`, and the note that a future browser playground must add `X-Authz-Paradigm` to the API's CORS `WithHeaders(...)` (server-side callers don't need it). Keep it short and factual.
 
 - [ ] **Step 2: Commit**
 
