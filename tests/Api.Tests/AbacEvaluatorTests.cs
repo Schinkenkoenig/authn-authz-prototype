@@ -36,4 +36,13 @@ public class AbacEvaluatorTests
         Assert.True(AbacEvaluator.Evaluate(User("engineering", "3"), StorageAction.Read, "hr/records.txt", Config).Permit);
         Assert.False(AbacEvaluator.Evaluate(User("engineering", "2"), StorageAction.Read, "hr/records.txt", Config).Permit);
     }
+
+    [Fact]
+    public void Empty_attribute_makes_templated_rule_non_applicable()
+    {
+        // A blank department must NOT resolve "{department}/" to "/" (which would otherwise cover
+        // every "/"-prefixed key). An empty attribute value means the rule does not apply.
+        var d = AbacEvaluator.Evaluate(User("", "2"), StorageAction.Read, "/anything", Config);
+        Assert.False(d.Permit);
+    }
 }

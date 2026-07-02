@@ -7,6 +7,7 @@ public static class PrefixMatch
 {
     public static bool Covers(string grant, string resource)
     {
+        if (string.IsNullOrEmpty(grant)) return false; // an empty grant covers nothing
         if (grant == "*") return true;
         if (grant == resource) return true;
         var prefix = grant.EndsWith('/') ? grant : grant + "/";

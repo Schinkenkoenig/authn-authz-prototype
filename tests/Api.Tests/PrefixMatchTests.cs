@@ -12,6 +12,8 @@ public class PrefixMatchTests
     [InlineData("finance/", "financials/x", false)]       // not fooled by shared leading text
     [InlineData("finance/q1.txt", "finance/q1.txt", true)]// exact key grant
     [InlineData("*", "anything/at/all", true)]            // wildcard grants everything
+    [InlineData("", "/x", false)]                         // empty grant covers nothing (not "/")
+    [InlineData("", "x", false)]                          // empty grant covers nothing
     public void Covers(string grant, string resource, bool expected) =>
         Assert.Equal(expected, PrefixMatch.Covers(grant, resource));
 }

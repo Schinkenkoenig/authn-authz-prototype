@@ -51,7 +51,9 @@ public static class AbacEvaluator
             var close = resolved.IndexOf('}', open);
             if (close < 0) break;
             var name = resolved[(open + 1)..close];
-            if (!attrs.TryGetValue(name, out var value)) { resolved = ""; return false; }
+            // A missing OR empty attribute means the rule does not apply — otherwise a blank
+            // attribute would collapse "{attr}/" to "/" and match everything.
+            if (!attrs.TryGetValue(name, out var value) || string.IsNullOrEmpty(value)) { resolved = ""; return false; }
             resolved = resolved[..open] + value + resolved[(close + 1)..];
             open = resolved.IndexOf('{');
         }

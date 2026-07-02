@@ -5,6 +5,11 @@ namespace Api.Authz;
 public sealed record AuthzConfig(RbacConfig Rbac, AbacConfig Abac, AclConfig Acl);
 
 // The thin data seam: pick an evaluator by selector, route the request. No engine hierarchy.
+//
+// SECURITY MODEL: the caller chooses the paradigm per request (X-Authz-Paradigm). There is no
+// server-side "correct paradigm for this caller", so effective access is the UNION of what any
+// paradigm would grant — this is a comparison showcase, NOT layered defense. Keep the seeded
+// config across paradigms mutually consistent, and do not read this as defense-in-depth.
 public static class AuthzDispatcher
 {
     public const string Default = "rbac";
