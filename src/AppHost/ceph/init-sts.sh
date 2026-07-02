@@ -14,10 +14,12 @@ RGW_ENDPOINT="${RGW_ENDPOINT:-http://172.30.0.10:8080}"
 ISSUER_HOST="${ISSUER_HOST:-172.30.0.20:8080}"           # host:port of Keycloak, used in iss
 ISSUER_URL="http://${ISSUER_HOST}/realms/authn-authz"
 CLIENT_ID="${CLIENT_ID:-webapp}"                          # == ID token aud
-# RBAC selects the role (RoleResolver: reader->DemoReader, writer->DemoWriter). In the
-# walking skeleton both carry the same broad permission policy — the per-caller inline
-# session policy is what scopes to a prefix (ABAC). Read-vs-write action semantics are
-# deferred to sub-project 2's real policy model.
+# RBAC: RoleResolver maps realm role -> Ceph IAM role (reader->DemoReader, writer->DemoWriter),
+# which selects the assumed IDENTITY. Both roles carry the SAME broad permission policy: on
+# this owner-account setup the role's permission-policy actions are NOT enforced (owner bypass,
+# see the STS verdicts note). The API's inline SESSION policy is the sole enforcer of BOTH the
+# action set (reader vs writer) and the prefix. The role's broad policy just makes the role a
+# usable identity vehicle.
 ROLE_NAMES="${ROLE_NAMES:-DemoReader DemoWriter}"
 ADMIN_KEY="${ADMIN_KEY:-demoaccess}"
 ADMIN_SECRET="${ADMIN_SECRET:-demosecret123}"
@@ -46,10 +48,26 @@ for ROLE_NAME in $ROLE_NAMES; do
   iam iam create-role --role-name "$ROLE_NAME" \
     --assume-role-policy-document file:///policies/trust-policy.json >/dev/null 2>&1 || echo "   (role already exists)"
 
-  echo ">> attach storage permission policy to ${ROLE_NAME}"
+  echo ">> attach broad permission policy to ${ROLE_NAME} (identity vehicle; not the enforcer)"
   iam iam put-role-policy --role-name "$ROLE_NAME" --policy-name StorageAccess \
-    --policy-document file:///policies/permission-policy.json >/dev/null
+    --policy-document "file:///policies/permission-policy.json" >/dev/null
 done
 
+echo ">> ensure bucket demo exists"
+iam s3 mb s3://demo >/dev/null 2>&1 || echo "   (bucket already exists)"
+
+echo ">> seed a readable welcome object under each user prefix (so read-only roles have something to read)"
+SEED_DIR="$(mktemp -d)"
+for u in alice bob; do
+  echo "Hello ${u}. Any signed-in user with a read capability can GET this object." > "${SEED_DIR}/${u}.txt"
+done
+docker run --rm -i --network "$NET" -v "${SEED_DIR}:/seed:ro" \
+  -e AWS_ACCESS_KEY_ID="$ADMIN_KEY" -e AWS_SECRET_ACCESS_KEY="$ADMIN_SECRET" -e AWS_DEFAULT_REGION=us-east-1 \
+  amazon/aws-cli --endpoint-url "$RGW_ENDPOINT" s3 cp /seed/alice.txt s3://demo/alice/welcome.txt >/dev/null
+docker run --rm -i --network "$NET" -v "${SEED_DIR}:/seed:ro" \
+  -e AWS_ACCESS_KEY_ID="$ADMIN_KEY" -e AWS_SECRET_ACCESS_KEY="$ADMIN_SECRET" -e AWS_DEFAULT_REGION=us-east-1 \
+  amazon/aws-cli --endpoint-url "$RGW_ENDPOINT" s3 cp /seed/bob.txt s3://demo/bob/welcome.txt >/dev/null
+rm -rf "$SEED_DIR"
+
 echo ">> NOTE: RGW must be restarted once after enabling STS (docker restart ${CEPH_CONTAINER})"
-echo ">> done. Roles: ${ROLE_NAMES// /, } (arn:aws:iam:::role/<name>)"
+echo ">> done. Roles: ${ROLE_NAMES// /, } (arn:aws:iam:::role/<name>); reader/writer capability is enforced by the API's inline session policy, not the role"

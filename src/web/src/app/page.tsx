@@ -5,16 +5,20 @@ import { useAuth } from "react-oidc-context";
 import { apiUrl } from "@/auth/oidc";
 
 type WhoAmI = { subject: string; name: string; roles: string[] };
-type Roundtrip = WhoAmI & {
+type StorageDemo = WhoAmI & {
   roleArn: string;
-  objectKey: string;
-  contentMatched: boolean;
+  prefix: string;
+  readKey: string;
+  readContent: string;
+  writeAllowed: boolean;
+  writeDetail: string;
+  writeKey: string | null;
 };
 
 export default function Home() {
   const auth = useAuth();
   const [whoami, setWhoami] = useState<WhoAmI | null>(null);
-  const [roundtrip, setRoundtrip] = useState<Roundtrip | null>(null);
+  const [demo, setDemo] = useState<StorageDemo | null>(null);
   const [error, setError] = useState("");
 
   if (auth.isLoading) return <main style={main}>Loading…</main>;
@@ -62,16 +66,16 @@ export default function Home() {
         <button
           style={btn}
           onClick={() =>
-            call<Roundtrip>(
+            call<StorageDemo>(
               "/storage/roundtrip",
               { method: "POST", headers: { Authorization: `Bearer ${access}`, "X-Id-Token": idToken } },
-              setRoundtrip,
+              setDemo,
             )
           }
         >
           POST /storage/roundtrip
         </button>
-        <button style={btnGhost} onClick={() => void auth.removeUser()}>
+        <button style={btnGhost} onClick={() => void auth.signoutRedirect()}>
           Sign out
         </button>
       </div>
@@ -83,10 +87,27 @@ export default function Home() {
           <pre style={box}>{JSON.stringify(whoami, null, 2)}</pre>
         </section>
       )}
-      {roundtrip && (
+      {demo && (
         <section>
-          <h3>/storage/roundtrip</h3>
-          <pre style={box}>{JSON.stringify(roundtrip, null, 2)}</pre>
+          <h3>/storage/roundtrip — authz showcase</h3>
+          <p style={{ margin: "4px 0" }}>
+            RBAC role: <b>{demo.roles.join(", ")}</b> → <code>{demo.roleArn}</code>
+          </p>
+          <p style={{ margin: "4px 0" }}>
+            ABAC prefix (session-policy scoped): <code>{demo.prefix}</code>
+          </p>
+          <p style={{ margin: "8px 0 4px" }}>
+            READ <code>{demo.readKey}</code>: <span style={{ color: "#4ade80" }}>allowed</span>
+          </p>
+          <pre style={box}>{demo.readContent}</pre>
+          <p style={{ margin: "8px 0 4px" }}>
+            WRITE:{" "}
+            {demo.writeAllowed ? (
+              <span style={{ color: "#4ade80" }}>allowed — {demo.writeDetail}</span>
+            ) : (
+              <span style={{ color: "#f87171" }}>{demo.writeDetail}</span>
+            )}
+          </p>
         </section>
       )}
     </main>

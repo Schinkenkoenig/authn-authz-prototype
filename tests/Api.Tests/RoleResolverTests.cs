@@ -21,4 +21,16 @@ public class RoleResolverTests
     [Fact]
     public void No_known_role_throws() =>
         Assert.Throws<UnauthorizedAccessException>(() => RoleResolver.ResolveRoleArn(new[] { "guest" }));
+
+    [Fact]
+    public void Writer_can_write()
+    {
+        Assert.True(RoleResolver.CanWrite(new[] { "writer" }));
+    }
+
+    [Fact]
+    public void Reader_cannot_write()
+    {
+        Assert.False(RoleResolver.CanWrite(new[] { "reader" }));
+    }
 }

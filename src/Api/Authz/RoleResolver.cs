@@ -11,4 +11,7 @@ public static class RoleResolver
             return "arn:aws:iam:::role/DemoReader";
         throw new UnauthorizedAccessException("caller has no storage role (reader/writer)");
     }
+
+    // The write capability the session policy grants — the enforced RBAC distinction.
+    public static bool CanWrite(IReadOnlyCollection<string> roles) => roles.Contains("writer");
 }
