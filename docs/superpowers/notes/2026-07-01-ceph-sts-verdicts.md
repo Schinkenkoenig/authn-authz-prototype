@@ -1,6 +1,18 @@
 # Ceph RGW STS — Empirical Verdicts (Walking Skeleton, spec §7)
 
-> Status: **IN PROGRESS.** Doc-based findings are marked *(preliminary)*; they are not final until proven by the raw round-trip in Task 3. These verdicts gate sub-project 2's policy model.
+> Status: **COMPLETE.** All §7 verdicts proven (below), then the model was pivoted (§6) to service-level IAM + app-level authz. Definition-of-Done evidence at the end. These verdicts + the pivot gate sub-project 2's policy model.
+
+## Definition of Done — evidence (Task 7, verified 2026-07-02 against the running Aspire stack)
+
+Run topology: `scripts/dev-up.sh` (Keycloak 172.30.0.20, Ceph 172.30.0.10, webid-refresher) + `dotnet run --project src/AppHost` (Aspire: Postgres + API + SPA). Verified via the browser-facing API proxy.
+
+1. **OIDC login end-to-end (tokens in browser)** — SPA serves on `:3000`; Authorization Code + PKCE against `webapp` proven by a scripted full flow (code→token, `aud=api` + id token). Browser click-through is the one manual step.
+2. **`GET /whoami`** returns validated claims from the access token (`aud=api`, roles from `realm_access`): alice → `{reader}`.
+3. **`POST /storage/roundtrip`** — API-enforced authz: READ succeeds for both; WRITE **denied for alice (reader)**, **allowed for bob (writer)**. Storage I/O uses the **service identity** (SDK web-identity → `DemoService`), no per-user STS.
+4. **Scalar** renders (`/scalar/v1` → 200). One trace covering API → STS → S3 is emitted via OTel (AWS instrumentation) to the Aspire dashboard — the visualization is a dashboard check.
+5. **Postgres wiring** — EF migration applied on startup against Aspire's Postgres; audit rows written (one per successful write; confirmed via `SELECT` on `AuditEntries`).
+
+Note on §6 pivot vs original DoD wording: item 3 originally said "AssumeRoleWithWebIdentity with an inline session policy narrowing to the prefix." That per-user mechanism was proven (verdicts §1–§5) then **superseded** — enforcement is now in the API (app-level PDP/PEP) and storage auth is the service identity. See §6 + [[authz-pivot-service-iam]].
 
 ## Pinned Ceph image
 
