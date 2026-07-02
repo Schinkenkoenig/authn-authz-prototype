@@ -20,7 +20,7 @@ CLIENT_ID="${CLIENT_ID:-webapp}"                          # == ID token aud
 # see the STS verdicts note). The API's inline SESSION policy is the sole enforcer of BOTH the
 # action set (reader vs writer) and the prefix. The role's broad policy just makes the role a
 # usable identity vehicle.
-ROLE_NAMES="${ROLE_NAMES:-DemoReader DemoWriter}"
+ROLE_NAMES="${ROLE_NAMES:-DemoReader DemoWriter DemoService}"
 ADMIN_KEY="${ADMIN_KEY:-demoaccess}"
 ADMIN_SECRET="${ADMIN_SECRET:-demosecret123}"
 POLICY_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -38,15 +38,35 @@ for cap in "oidc-provider=*" "roles=*" "user-policy=*"; do
   docker exec "$CEPH_CONTAINER" radosgw-admin caps add --uid=demo --caps="$cap" >/dev/null
 done
 
-echo ">> (re)create OIDC provider for issuer ${ISSUER_URL}"
+PROVIDER_ARN="arn:aws:iam:::oidc-provider/${ISSUER_HOST}/realms/authn-authz"
+SERVICE_CLIENT_ID="${SERVICE_CLIENT_ID:-storage-service}"   # == service token aud (client-credentials)
+
+# Ceph RGW has no add-client-id-to-open-id-connect-provider, so to guarantee both client
+# ids are present we delete (if any) and recreate the provider. The ARN is derived from the
+# issuer URL, so it stays stable and existing role trust policies remain valid.
+echo ">> (re)create OIDC provider for issuer ${ISSUER_URL} (clients: ${CLIENT_ID}, ${SERVICE_CLIENT_ID})"
+iam iam delete-open-id-connect-provider --open-id-connect-provider-arn "$PROVIDER_ARN" >/dev/null 2>&1 || true
 iam iam create-open-id-connect-provider \
-  --url "$ISSUER_URL" --client-id-list "$CLIENT_ID" \
-  --thumbprint-list ffffffffffffffffffffffffffffffffffffffff >/dev/null 2>&1 || echo "   (provider already exists)"
+  --url "$ISSUER_URL" --client-id-list "$CLIENT_ID" "$SERVICE_CLIENT_ID" \
+  --thumbprint-list ffffffffffffffffffffffffffffffffffffffff >/dev/null 2>&1 \
+  || echo "   (provider create failed — check RGW STS config)"
+
+# The user roles (reader/writer) trust the SPA client (aud=webapp); the service role trusts
+# the service client (aud=storage-service). The service identity assumes DemoService; per-user
+# authorization is enforced in the API (app-level), not by these roles.
+trust_for() { case "$1" in
+  DemoService) echo trust-policy-service.json ;;
+  *)           echo trust-policy.json ;;
+esac; }
 
 for ROLE_NAME in $ROLE_NAMES; do
-  echo ">> (re)create role ${ROLE_NAME} with trust policy"
+  TRUST_FILE="$(trust_for "$ROLE_NAME")"
+  echo ">> (re)create role ${ROLE_NAME} (trust: ${TRUST_FILE})"
   iam iam create-role --role-name "$ROLE_NAME" \
-    --assume-role-policy-document file:///policies/trust-policy.json >/dev/null 2>&1 || echo "   (role already exists)"
+    --assume-role-policy-document "file:///policies/${TRUST_FILE}" >/dev/null 2>&1 \
+    || iam iam update-assume-role-policy --role-name "$ROLE_NAME" \
+         --policy-document "file:///policies/${TRUST_FILE}" >/dev/null 2>&1 \
+    || echo "   (could not set trust policy)"
 
   echo ">> attach broad permission policy to ${ROLE_NAME} (identity vehicle; not the enforcer)"
   iam iam put-role-policy --role-name "$ROLE_NAME" --policy-name StorageAccess \

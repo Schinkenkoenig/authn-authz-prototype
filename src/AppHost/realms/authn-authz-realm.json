@@ -7,8 +7,14 @@
   "duplicateEmailsAllowed": false,
   "roles": {
     "realm": [
-      { "name": "reader", "description": "May read objects under their own prefix" },
-      { "name": "writer", "description": "May read and write objects under their own prefix" }
+      {
+        "name": "reader",
+        "description": "May read objects under their own prefix"
+      },
+      {
+        "name": "writer",
+        "description": "May read and write objects under their own prefix"
+      }
     ]
   },
   "clients": [
@@ -41,6 +47,28 @@
           }
         }
       ]
+    },
+    {
+      "clientId": "storage-service",
+      "name": "Storage Service (IRSA-style service identity)",
+      "enabled": true,
+      "publicClient": false,
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "secret": "storage-service-secret",
+      "protocolMappers": [
+        {
+          "name": "storage-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.custom.audience": "storage-service",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
     }
   ],
   "users": [
@@ -52,7 +80,11 @@
       "firstName": "Alice",
       "lastName": "Reader",
       "credentials": [
-        { "type": "password", "value": "alice", "temporary": false }
+        {
+          "type": "password",
+          "value": "alice",
+          "temporary": false
+        }
       ],
       "realmRoles": [
         "reader"
@@ -66,7 +98,11 @@
       "firstName": "Bob",
       "lastName": "Writer",
       "credentials": [
-        { "type": "password", "value": "bob", "temporary": false }
+        {
+          "type": "password",
+          "value": "bob",
+          "temporary": false
+        }
       ],
       "realmRoles": [
         "writer"
