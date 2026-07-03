@@ -15,11 +15,3 @@ public sealed class OpenFgaRebacClient(OpenFgaClient client) : IRebacClient
         return res.Allowed ?? false;
     }
 }
-
-// Stand-in when OpenFGA is not configured (no Openfga:ApiUrl): the four in-process paradigms still
-// run; selecting rebac simply denies.
-public sealed class UnconfiguredRebacClient : IRebacClient
-{
-    public Task<bool> CheckAsync(string user, string relation, string obj, CancellationToken ct) =>
-        Task.FromResult(false);
-}
