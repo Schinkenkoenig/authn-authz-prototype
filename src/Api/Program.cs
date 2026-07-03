@@ -59,6 +59,16 @@ builder.Services.AddSingleton(ceph);
 builder.Services.AddSingleton<S3Gateway>();
 builder.Services.AddSingleton<Api.Authz.AuthzConfigStore>();
 
+// ReBAC via OpenFGA: provisioned at startup like the DB migrate→seed (fail-fast if configured but
+// unreachable). When Openfga:ApiUrl is unset, a deny-all stand-in keeps the other four paradigms
+// working without an engine.
+var openfgaUrl = builder.Configuration["Openfga:ApiUrl"];
+Api.Authz.IRebacClient rebac = string.IsNullOrEmpty(openfgaUrl)
+    ? new Api.Authz.UnconfiguredRebacClient()
+    : new Api.Authz.OpenFgaRebacClient(
+        await Api.Authz.RebacProvisioner.ProvisionAsync(openfgaUrl, Api.Authz.RebacModel.Json, CancellationToken.None));
+builder.Services.AddSingleton(rebac);
+
 builder.Services.AddDbContext<AppDbContext>(o =>
     o.UseNpgsql(builder.Configuration.GetConnectionString("appdb")));
 

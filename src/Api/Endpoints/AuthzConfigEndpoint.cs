@@ -29,6 +29,13 @@ public sealed class AuthzConfigEndpoint(AuthzConfigStore store) : EndpointWithou
                 note = "config lives in the IdP claim mapper; the app trusts the token",
                 callerGrants = CallerClaims.FromPrincipal(User).StorageGrants,
             },
+            "rebac" => new
+            {
+                engine = "openfga",
+                note = "config is a relationship graph in OpenFGA: the model is the schema, the tuples are the data",
+                model = RebacModel.Dsl,
+                tuples = RebacSeeder.Tuples,
+            },
             _ => null,
         };
 
