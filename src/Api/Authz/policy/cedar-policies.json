@@ -1,0 +1,6 @@
+[
+  {"id":"r1-read-clearance","content":"permit(principal, action == Action::\"read\", resource) when { context.classification <= context.level };"},
+  {"id":"r2-write-dept","content":"permit(principal, action == Action::\"write\", resource) when { context.caller_department == context.owner_department && context.classification <= context.level };"},
+  {"id":"r3-forbid-frozen","content":"forbid(principal, action == Action::\"write\", resource) when { context.frozen };"},
+  {"id":"r4-break-glass","content":"permit(principal, action == Action::\"read\", resource) when { context.roles.contains(\"incident_responder\") && context.break_glass };"}
+]
