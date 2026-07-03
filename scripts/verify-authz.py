@@ -19,8 +19,11 @@ def token(user):
 def call(method, path, tok, paradigm, body=None, extra=None):
     url = API + path
     data = json.dumps(body).encode() if body is not None else None
-    headers = {"Authorization": f"Bearer {tok}", "Content-Type": "application/json",
-               "X-Authz-Paradigm": paradigm}
+    # Only advertise a JSON body when one is sent: a bodyless GET with Content-Type: application/json
+    # makes FastEndpoints attempt (and fail) body binding → 400.
+    headers = {"Authorization": f"Bearer {tok}", "X-Authz-Paradigm": paradigm}
+    if data is not None:
+        headers["Content-Type"] = "application/json"
     if extra:
         headers.update(extra)
     req = urllib.request.Request(url, data=data, method=method, headers=headers)
@@ -70,6 +73,9 @@ CASES = [
     ("erin",  "cedar", "POST", "/storage/write", {"key": "internal/finance/frozen/y", "content": "x"}, False),
     ("carol", "cedar", "POST", "/storage/read",  {"key": "classified/x"}, True,  {"X-Break-Glass": "true"}),
     ("carol", "cedar", "POST", "/storage/read",  {"key": "classified/x"}, False),
+    # list has no scenario rule under policy-as-code → deny (403 before touching S3, no unknown-action 500).
+    ("bob",   "opa",   "GET",  "/storage/list",  None, False),
+    ("bob",   "cedar", "GET",  "/storage/list",  None, False),
 ]
 
 fails = 0

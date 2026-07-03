@@ -42,7 +42,7 @@ python3 scripts/verify-authz.py http://127.0.0.1:5198
 
 - `dotnet test` → **69/69** unit tests (22 new: seam dispatch, context, PolicyInput derivation,
   Cedar + OPA evaluator routing).
-- `verify-authz.py` → **31/31 ALL PASS** against real Keycloak tokens + real Ceph + real OpenFGA +
+- `verify-authz.py` → **33/33 ALL PASS** against real Keycloak tokens + real Ceph + real OpenFGA +
   real OPA + real cedar-agent, including the 7 OPA and 7 Cedar cases over the **same** scenario:
   - clearance read (bob level 3 permit `classified/`, alice level 2 deny);
   - department write (erin writes `internal/finance/` permit, `internal/eng/` deny);
@@ -65,6 +65,8 @@ python3 scripts/verify-authz.py http://127.0.0.1:5198
   `authz.rego` / `cedar-policies.json` needs the **API restarted** to re-push (the engines don't watch
   the files).
 - **`list` under policy-as-code:** the scenario defines only read/write rules, so `list` has no
-  matching permit and denies. Intentional (same as ReBAC skipping list).
+  matching permit and denies (403 before touching S3). Verified in the matrix for both engines —
+  cedar-agent tolerates the unregistered `Action::"list"` and returns a clean `Deny` (HTTP 200), so
+  there is no unknown-action 500. Intentional (same as ReBAC skipping list).
 - Teardown of the fast-verify scaffolding: kill the API process, `docker rm -f sp4-pg`. Leave the
   fixed-IP infra (kc-spike, ceph-demo, openfga, opa, cedar-agent, webid-refresher) up.
