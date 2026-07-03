@@ -14,6 +14,10 @@
       {
         "name": "writer",
         "description": "May read and write objects under their own prefix"
+      },
+      {
+        "name": "incident_responder",
+        "description": "Break-glass: may read any object when the request carries break_glass"
       }
     ]
   },
@@ -158,7 +162,8 @@
         "department": ["hr"],
         "level": ["1"],
         "storage_grants": ["r:hr/"]
-      }
+      },
+      "realmRoles": ["incident_responder"]
     },
     {
       "username": "dave",
