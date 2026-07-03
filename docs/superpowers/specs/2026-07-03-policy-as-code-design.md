@@ -113,30 +113,48 @@ ignore it. `verify-authz.py` sends the header for the break-glass cases.
 ## Cedar specifics
 
 - **Engine:** `cedar-agent` container. It holds a policy store + a data (entities) store and answers
-  `is_authorized` over REST. Exact routes (policy push, entity push, decision) are **pinned during
-  TDD** against the running container, not guessed here.
-- **Model:** principals = `User`; resources = `Resource` with attributes `{classification,
-  owner_department}`; actions = `read` / `write`. Caller `level`, `department`, `Roles` become
-  principal attributes; `break_glass` rides the request **context**.
-- **Policy (illustrative — exact syntax validated during TDD):**
+  `is_authorized` over REST: `PUT /v1/policies` (`[{"id","content":<cedar text>}]`), `PUT /v1/data`
+  (entities), `POST /v1/is_authorized` (`{principal,action,resource,context}` as uid strings) →
+  `{"decision":"Allow"|"Deny","diagnostics":{"reason":[…],"errors":[]}}`.
+- **Model (spike-proven — see below):** all decision data rides in **`context`**, not entity
+  attributes, because storage keys are dynamic and can't be pre-registered. `principal` /`resource`
+  are real-but-unregistered uids (`User::"bob"`, `Resource::"<key>"`) kept only for readable
+  diagnostics; their attributes are unused. Only the finite `Action` set (`read`, `write`) is loaded
+  as entities.
+- **Policy (spike-verified against `permitio/cedar-agent`):**
 
   ```cedar
   permit(principal, action == Action::"read", resource)
-    when { principal.level >= resource.classification };
+    when { context.classification <= context.level };
 
   permit(principal, action == Action::"write", resource)
-    when { principal.department == resource.owner_department
-           && principal.level >= resource.classification };
+    when { context.caller_department == context.owner_department
+           && context.classification <= context.level };
 
   forbid(principal, action == Action::"write", resource)
-    when { resource.frozen };
+    when { context.frozen };
 
   permit(principal, action == Action::"read", resource)
-    when { principal.roles.contains("incident_responder") && context.break_glass };
+    when { context.roles.contains("incident_responder") && context.break_glass };
   ```
 
-  Cedar's `forbid` naturally overrides `permit` (rule 3). `frozen` is precomputed per-entity from the
-  key.
+  Cedar's `forbid` naturally overrides `permit` (rule 3).
+
+### Engine spike (verified 2026-07-03, before writing code)
+
+Both engines were stood up (`permitio/cedar-agent`, `openpolicyagent/opa run --server`) and the four
+rules proven by curl — the same de-risking done for ReBAC:
+
+- **Cedar:** context-carried policies evaluate correctly; **unregistered principal/resource uids are
+  tolerated** (no entity pre-registration for dynamic keys); `forbid` overrides `permit`; response is
+  `{"decision":"Allow"|"Deny", "diagnostics":{"reason":[…]}}` (the `reason` list feeds
+  `AuthzDecision.Reason`).
+- **OPA:** `input`-carried policy evaluates correctly; **`default allow := false` is required** or a
+  deny yields an empty `{}` result instead of `{"permit":false}`.
+
+Consequence: both clients are thin and symmetric — a single pure `PolicyInput` (classification from
+prefix, owner_department from 2nd segment, `frozen` from a `frozen/` segment, caller level/dept/roles,
+break_glass) is computed once, then serialized two ways.
 
 ## OPA / Rego specifics
 
@@ -154,6 +172,7 @@ ignore it. `verify-authz.py` sends the header for the break-glass cases.
 
   default permit := false
   default deny := false
+  default allow := false                        # REQUIRED: else a deny returns {} not {"permit":false}
 
   permit if {                                   # rule 1
     input.action == "read"
