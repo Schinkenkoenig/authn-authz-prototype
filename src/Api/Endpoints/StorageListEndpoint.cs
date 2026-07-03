@@ -11,7 +11,8 @@ public sealed class ListRequest { public string Prefix { get; set; } = ""; }
 
 public sealed record ListResult(string Paradigm, bool Permit, string Reason, string Prefix, IReadOnlyList<string> Keys);
 
-public sealed class StorageListEndpoint(AuthzConfigStore store, S3Gateway s3, IRebacClient rebac)
+public sealed class StorageListEndpoint(AuthzConfigStore store, S3Gateway s3,
+    IReadOnlyDictionary<string, IExternalEvaluator> external)
     : Endpoint<ListRequest, ListResult>
 {
     public override void Configure()
@@ -24,7 +25,9 @@ public sealed class StorageListEndpoint(AuthzConfigStore store, S3Gateway s3, IR
     {
         var caller = CallerClaims.FromPrincipal(User);
         var paradigm = AuthzDispatcher.Resolve(HttpContext.Request.Headers["X-Authz-Paradigm"].ToString());
-        var decision = await AuthzDispatcher.DecideAsync(paradigm, new AuthzRequest(caller, StorageAction.List, req.Prefix), store.Current, rebac, ct);
+        var ctx = new AuthzContext(
+            HttpContext.Request.Headers["X-Break-Glass"].ToString().Equals("true", StringComparison.OrdinalIgnoreCase));
+        var decision = await AuthzDispatcher.DecideAsync(paradigm, new AuthzRequest(caller, StorageAction.List, req.Prefix, ctx), store.Current, external, ct);
 
         if (!decision.Permit)
         {

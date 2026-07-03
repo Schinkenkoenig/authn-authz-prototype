@@ -13,7 +13,7 @@ public sealed record AuthzConfig(RbacConfig Rbac, AbacConfig Abac, AclConfig Acl
 public static class AuthzDispatcher
 {
     public const string Default = "rbac";
-    public static readonly IReadOnlyList<string> Paradigms = ["rbac", "abac", "claims", "acl", "rebac"];
+    public static readonly IReadOnlyList<string> Paradigms = ["rbac", "abac", "claims", "acl", "rebac", "cedar", "opa"];
 
     public static string Resolve(string? selector) =>
         selector is not null && Paradigms.Contains(selector) ? selector : Default;
@@ -28,17 +28,14 @@ public static class AuthzDispatcher
         _ => new(false, $"unknown paradigm '{paradigm}'", paradigm),
     };
 
-    // The async variant of the seam. ReBAC's graph lives in OpenFGA, so its decision is an awaited
-    // network Check — it can't be a pure (claims,action,resource,config) function. The four sync
-    // paradigms delegate to Decide; only rebac awaits. rebac needs the injected client, so it denies
-    // when the client is absent (e.g. OpenFGA not configured).
+    // The async variant of the seam. External engines (rebac/cedar/opa) each decide via an awaited
+    // network call, so they can't be pure (claims,action,resource,config) functions. They are
+    // resolved from the injected dictionary by paradigm; everything else delegates to the pure
+    // sync Decide. A selected external paradigm absent from the map denies (see UnconfiguredEvaluator).
     public static Task<AuthzDecision> DecideAsync(
-        string paradigm, AuthzRequest req, AuthzConfig cfg, IRebacClient? rebac, CancellationToken ct) =>
-        paradigm switch
-        {
-            "rebac" => rebac is null
-                ? Task.FromResult(new AuthzDecision(false, "ReBAC engine not configured", "rebac"))
-                : RebacEvaluator.EvaluateAsync(req.Caller, req.Action, req.Resource, rebac, ct),
-            _ => Task.FromResult(Decide(paradigm, req, cfg)),
-        };
+        string paradigm, AuthzRequest req, AuthzConfig cfg,
+        IReadOnlyDictionary<string, IExternalEvaluator> external, CancellationToken ct)
+        => external.TryGetValue(paradigm, out var ev)
+            ? ev.EvaluateAsync(req, ct)
+            : Task.FromResult(Decide(paradigm, req, cfg));
 }

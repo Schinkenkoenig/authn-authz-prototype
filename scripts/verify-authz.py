@@ -16,12 +16,17 @@ def token(user):
         headers={"Content-Type": "application/x-www-form-urlencoded"})
     return json.load(urllib.request.urlopen(req))["access_token"]
 
-def call(method, path, tok, paradigm, body=None):
+def call(method, path, tok, paradigm, body=None, extra=None):
     url = API + path
     data = json.dumps(body).encode() if body is not None else None
-    req = urllib.request.Request(url, data=data, method=method,
-        headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json",
-                 "X-Authz-Paradigm": paradigm})
+    # Only advertise a JSON body when one is sent: a bodyless GET with Content-Type: application/json
+    # makes FastEndpoints attempt (and fail) body binding → 400.
+    headers = {"Authorization": f"Bearer {tok}", "X-Authz-Paradigm": paradigm}
+    if data is not None:
+        headers["Content-Type"] = "application/json"
+    if extra:
+        headers.update(extra)
+    req = urllib.request.Request(url, data=data, method=method, headers=headers)
     try:
         resp = urllib.request.urlopen(req)
         return resp.status, json.load(resp)
@@ -52,11 +57,32 @@ CASES = [
     ("dave",  "rebac",  "POST", "/storage/read",  {"key": "projects/apollo/a.txt"}, False),                 # no grant, not in team
     ("alice", "rebac",  "POST", "/storage/write", {"key": "projects/apollo/x.txt", "content": "x"}, True),   # owner of apollo => editor
     ("dave",  "rebac",  "POST", "/storage/read",  {"key": "shared/notes.txt"}, True),                       # public read (user:*)
+    # OPA/Rego (policy-as-code): clearance, department, frozen-deny-override, break-glass.
+    ("bob",   "opa", "POST", "/storage/read",  {"key": "classified/x"}, True),                       # level3 >= 3
+    ("alice", "opa", "POST", "/storage/read",  {"key": "classified/x"}, False),                      # level2 < 3
+    ("erin",  "opa", "POST", "/storage/write", {"key": "internal/finance/y", "content": "x"}, True), # finance owns, level3>=2
+    ("erin",  "opa", "POST", "/storage/write", {"key": "internal/eng/y", "content": "x"}, False),    # not owner dept
+    ("erin",  "opa", "POST", "/storage/write", {"key": "internal/finance/frozen/y", "content": "x"}, False), # frozen forbids
+    ("carol", "opa", "POST", "/storage/read",  {"key": "classified/x"}, True,  {"X-Break-Glass": "true"}),  # break-glass
+    ("carol", "opa", "POST", "/storage/read",  {"key": "classified/x"}, False),                      # no flag → deny
+    # Cedar (policy-as-code): identical scenario, judged by cedar-agent.
+    ("bob",   "cedar", "POST", "/storage/read",  {"key": "classified/x"}, True),
+    ("alice", "cedar", "POST", "/storage/read",  {"key": "classified/x"}, False),
+    ("erin",  "cedar", "POST", "/storage/write", {"key": "internal/finance/y", "content": "x"}, True),
+    ("erin",  "cedar", "POST", "/storage/write", {"key": "internal/eng/y", "content": "x"}, False),
+    ("erin",  "cedar", "POST", "/storage/write", {"key": "internal/finance/frozen/y", "content": "x"}, False),
+    ("carol", "cedar", "POST", "/storage/read",  {"key": "classified/x"}, True,  {"X-Break-Glass": "true"}),
+    ("carol", "cedar", "POST", "/storage/read",  {"key": "classified/x"}, False),
+    # list has no scenario rule under policy-as-code → deny (403 before touching S3, no unknown-action 500).
+    ("bob",   "opa",   "GET",  "/storage/list",  None, False),
+    ("bob",   "cedar", "GET",  "/storage/list",  None, False),
 ]
 
 fails = 0
-for user, paradigm, method, path, body, expect in CASES:
-    status, resp = call(method, path, token(user), paradigm, body)
+for case in CASES:
+    user, paradigm, method, path, body, expect = case[:6]
+    extra = case[6] if len(case) > 6 else None
+    status, resp = call(method, path, token(user), paradigm, body, extra)
     permit = resp.get("permit", status == 200)
     ok = permit == expect and (status == 200 if expect else status == 403)
     print(f"{'PASS' if ok else 'FAIL'}  {user:6} {paradigm:6} {path:16} -> {status} permit={permit} (want {expect}) :: {resp.get('reason','')}")

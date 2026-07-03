@@ -26,6 +26,10 @@
     <!-- ReBAC model artifacts loaded at runtime (RebacModel / RebacProvisioner). -->
     <None Update="Authz\rebac\model.fga" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Authz\rebac\model.json" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Policy-as-code artifacts loaded at runtime (PolicyAssets / Cedar+OPA provisioners). -->
+    <None Update="Authz\policy\authz.rego" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Authz\policy\cedar-policies.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Authz\policy\cedar-entities.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <PropertyGroup>

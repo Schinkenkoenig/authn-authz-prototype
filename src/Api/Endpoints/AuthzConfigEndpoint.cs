@@ -36,6 +36,18 @@ public sealed class AuthzConfigEndpoint(AuthzConfigStore store) : EndpointWithou
                 model = RebacModel.Dsl,
                 tuples = RebacSeeder.Tuples,
             },
+            "opa" => new
+            {
+                engine = "opa",
+                note = "config is a Rego module evaluated over a per-request input document",
+                rego = PolicyAssets.Rego,
+            },
+            "cedar" => new
+            {
+                engine = "cedar",
+                note = "config is a set of Cedar permit/forbid policies; decision data rides in context",
+                policies = System.Text.Json.JsonDocument.Parse(PolicyAssets.CedarPolicies).RootElement,
+            },
             _ => null,
         };
 

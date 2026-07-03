@@ -48,6 +48,18 @@ if exists openfga; then docker start openfga >/dev/null; else
     openfga/openfga run >/dev/null
 fi
 
+echo ">> OPA (opa, 172.30.0.50) — Rego policy engine"
+if exists opa; then docker start opa >/dev/null; else
+  docker run -d --name opa --network "$NET" --ip 172.30.0.50 \
+    openpolicyagent/opa run --server --addr :8181 >/dev/null
+fi
+
+echo ">> cedar-agent (cedar-agent, 172.30.0.40) — Cedar policy engine"
+if exists cedar-agent; then docker start cedar-agent >/dev/null; else
+  docker run -d --name cedar-agent --network "$NET" --ip 172.30.0.40 \
+    permitio/cedar-agent >/dev/null
+fi
+
 wait_http() { # url label
   for _ in $(seq 1 60); do
     code=$(curl -s -o /dev/null -w '%{http_code}' "$1" 2>/dev/null || true)
@@ -61,6 +73,8 @@ echo ">> waiting for services"
 wait_http "$KC/realms/authn-authz/.well-known/openid-configuration" Keycloak
 wait_http "$RGW" "Ceph RGW"
 wait_http "http://172.30.0.30:8080/healthz" OpenFGA
+wait_http "http://172.30.0.50:8181/health" OPA
+wait_http "http://172.30.0.40:8180/v1/policies" cedar-agent
 
 echo ">> configure STS (idempotent)"
 bash "$APPHOST_DIR/ceph/init-sts.sh"
@@ -83,10 +97,12 @@ for _ in $(seq 1 30); do [ -s "$TOKEN_DIR/token" ] && { echo "   first token wri
 
 cat <<EOF
 
->> infra up (Keycloak + Ceph + OpenFGA + web-identity refresher).
+>> infra up (Keycloak + Ceph + OpenFGA + OPA + cedar-agent + web-identity refresher).
    Keycloak : $KC  (realm authn-authz; alice/alice reader, bob/bob writer)
    Ceph RGW : $RGW  (bucket demo; service role arn:aws:iam:::role/DemoService)
    OpenFGA  : http://172.30.0.30:8080  (in-memory; store+model+tuples provisioned by the API at startup)
+   OPA      : http://172.30.0.50:8181  (Rego policy pushed by the API at startup)
+   Cedar    : http://172.30.0.40:8180  (Cedar policies pushed by the API at startup)
    Token    : $TOKEN_DIR/token  (refreshed by the webid-refresher sidecar)
 
    Now start the app tier (Postgres + API + SPA) under Aspire:

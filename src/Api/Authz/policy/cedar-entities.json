@@ -1,0 +1,4 @@
+[
+  {"uid":{"type":"Action","id":"read"},"attrs":{},"parents":[]},
+  {"uid":{"type":"Action","id":"write"},"attrs":{},"parents":[]}
+]

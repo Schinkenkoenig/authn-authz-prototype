@@ -59,15 +59,29 @@ builder.Services.AddSingleton(ceph);
 builder.Services.AddSingleton<S3Gateway>();
 builder.Services.AddSingleton<Api.Authz.AuthzConfigStore>();
 
-// ReBAC via OpenFGA: provisioned at startup like the DB migrate→seed (fail-fast if configured but
-// unreachable). When Openfga:ApiUrl is unset, a deny-all stand-in keeps the other four paradigms
-// working without an engine.
+// External authorization engines: each provisioned at startup like the DB migrate→seed (fail-fast
+// if configured but unreachable). When a URL is unset, a deny stand-in keeps the other paradigms
+// working. All are registered as IExternalEvaluator and dispatched by paradigm name.
 var openfgaUrl = builder.Configuration["Openfga:ApiUrl"];
-Api.Authz.IRebacClient rebac = string.IsNullOrEmpty(openfgaUrl)
-    ? new Api.Authz.UnconfiguredRebacClient()
-    : new Api.Authz.OpenFgaRebacClient(
-        await Api.Authz.RebacProvisioner.ProvisionAsync(openfgaUrl, Api.Authz.RebacModel.Json, CancellationToken.None));
-builder.Services.AddSingleton(rebac);
+builder.Services.AddSingleton<Api.Authz.IExternalEvaluator>(string.IsNullOrEmpty(openfgaUrl)
+    ? new Api.Authz.UnconfiguredEvaluator("rebac")
+    : new Api.Authz.RebacExternalEvaluator(new Api.Authz.OpenFgaRebacClient(
+        await Api.Authz.RebacProvisioner.ProvisionAsync(openfgaUrl, Api.Authz.RebacModel.Json, CancellationToken.None))));
+
+var cedarUrl = builder.Configuration["Cedar:ApiUrl"];
+builder.Services.AddSingleton<Api.Authz.IExternalEvaluator>(string.IsNullOrEmpty(cedarUrl)
+    ? new Api.Authz.UnconfiguredEvaluator("cedar")
+    : new Api.Authz.CedarEvaluator(await Api.Authz.CedarProvisioner.ProvisionAsync(
+        cedarUrl, Api.Authz.PolicyAssets.CedarPolicies, Api.Authz.PolicyAssets.CedarEntities, CancellationToken.None)));
+
+var opaUrl = builder.Configuration["Opa:ApiUrl"];
+builder.Services.AddSingleton<Api.Authz.IExternalEvaluator>(string.IsNullOrEmpty(opaUrl)
+    ? new Api.Authz.UnconfiguredEvaluator("opa")
+    : new Api.Authz.OpaEvaluator(
+        await Api.Authz.OpaProvisioner.ProvisionAsync(opaUrl, Api.Authz.PolicyAssets.Rego, CancellationToken.None)));
+
+builder.Services.AddSingleton<IReadOnlyDictionary<string, Api.Authz.IExternalEvaluator>>(sp =>
+    sp.GetServices<Api.Authz.IExternalEvaluator>().ToDictionary(e => e.Paradigm));
 
 builder.Services.AddDbContext<AppDbContext>(o =>
     o.UseNpgsql(builder.Configuration.GetConnectionString("appdb")));
