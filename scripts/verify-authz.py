@@ -62,6 +62,14 @@ CASES = [
     ("erin",  "opa", "POST", "/storage/write", {"key": "internal/finance/frozen/y", "content": "x"}, False), # frozen forbids
     ("carol", "opa", "POST", "/storage/read",  {"key": "classified/x"}, True,  {"X-Break-Glass": "true"}),  # break-glass
     ("carol", "opa", "POST", "/storage/read",  {"key": "classified/x"}, False),                      # no flag → deny
+    # Cedar (policy-as-code): identical scenario, judged by cedar-agent.
+    ("bob",   "cedar", "POST", "/storage/read",  {"key": "classified/x"}, True),
+    ("alice", "cedar", "POST", "/storage/read",  {"key": "classified/x"}, False),
+    ("erin",  "cedar", "POST", "/storage/write", {"key": "internal/finance/y", "content": "x"}, True),
+    ("erin",  "cedar", "POST", "/storage/write", {"key": "internal/eng/y", "content": "x"}, False),
+    ("erin",  "cedar", "POST", "/storage/write", {"key": "internal/finance/frozen/y", "content": "x"}, False),
+    ("carol", "cedar", "POST", "/storage/read",  {"key": "classified/x"}, True,  {"X-Break-Glass": "true"}),
+    ("carol", "cedar", "POST", "/storage/read",  {"key": "classified/x"}, False),
 ]
 
 fails = 0

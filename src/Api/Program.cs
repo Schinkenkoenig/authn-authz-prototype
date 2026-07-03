@@ -68,6 +68,12 @@ builder.Services.AddSingleton<Api.Authz.IExternalEvaluator>(string.IsNullOrEmpty
     : new Api.Authz.RebacExternalEvaluator(new Api.Authz.OpenFgaRebacClient(
         await Api.Authz.RebacProvisioner.ProvisionAsync(openfgaUrl, Api.Authz.RebacModel.Json, CancellationToken.None))));
 
+var cedarUrl = builder.Configuration["Cedar:ApiUrl"];
+builder.Services.AddSingleton<Api.Authz.IExternalEvaluator>(string.IsNullOrEmpty(cedarUrl)
+    ? new Api.Authz.UnconfiguredEvaluator("cedar")
+    : new Api.Authz.CedarEvaluator(await Api.Authz.CedarProvisioner.ProvisionAsync(
+        cedarUrl, Api.Authz.PolicyAssets.CedarPolicies, Api.Authz.PolicyAssets.CedarEntities, CancellationToken.None)));
+
 var opaUrl = builder.Configuration["Opa:ApiUrl"];
 builder.Services.AddSingleton<Api.Authz.IExternalEvaluator>(string.IsNullOrEmpty(opaUrl)
     ? new Api.Authz.UnconfiguredEvaluator("opa")

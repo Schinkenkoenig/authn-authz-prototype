@@ -13,6 +13,7 @@ const string issuer = "http://172.30.0.20:8080/realms/authn-authz";
 const string cephUrl = "http://172.30.0.10:8080";
 const string openfgaUrl = "http://172.30.0.30:8080";
 const string opaUrl = "http://172.30.0.50:8181";
+const string cedarUrl = "http://172.30.0.40:8180";
 
 var api = builder.AddProject<Projects.Api>("api")
     .WithReference(appdb)
@@ -22,6 +23,7 @@ var api = builder.AddProject<Projects.Api>("api")
     .WithEnvironment("Ceph__ServiceUrl", cephUrl)
     .WithEnvironment("Openfga__ApiUrl", openfgaUrl)
     .WithEnvironment("Opa__ApiUrl", opaUrl)
+    .WithEnvironment("Cedar__ApiUrl", cedarUrl)
     .WithEnvironment("Ceph__Region", "us-east-1")
     .WithEnvironment("Ceph__Bucket", "demo")
     .WithEnvironment("Cors__Origins__0", "http://localhost:3000")
