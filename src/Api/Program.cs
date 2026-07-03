@@ -68,6 +68,12 @@ builder.Services.AddSingleton<Api.Authz.IExternalEvaluator>(string.IsNullOrEmpty
     : new Api.Authz.RebacExternalEvaluator(new Api.Authz.OpenFgaRebacClient(
         await Api.Authz.RebacProvisioner.ProvisionAsync(openfgaUrl, Api.Authz.RebacModel.Json, CancellationToken.None))));
 
+var opaUrl = builder.Configuration["Opa:ApiUrl"];
+builder.Services.AddSingleton<Api.Authz.IExternalEvaluator>(string.IsNullOrEmpty(opaUrl)
+    ? new Api.Authz.UnconfiguredEvaluator("opa")
+    : new Api.Authz.OpaEvaluator(
+        await Api.Authz.OpaProvisioner.ProvisionAsync(opaUrl, Api.Authz.PolicyAssets.Rego, CancellationToken.None)));
+
 builder.Services.AddSingleton<IReadOnlyDictionary<string, Api.Authz.IExternalEvaluator>>(sp =>
     sp.GetServices<Api.Authz.IExternalEvaluator>().ToDictionary(e => e.Paradigm));
 
