@@ -114,4 +114,32 @@ for case in CASES:
     fails += 0 if ok else 1
 
 print(f"\n{'ALL PASS' if fails == 0 else str(fails)+' FAILED'}")
+
+# Cross-paradigm consistency (informational only — does not affect the exit code). Same
+# (user, action, resource) tuple run through every paradigm's OWN existing demo data — NOT the
+# apples-to-apples scenario (that's separate future work, one fixed scenario authored identically
+# under every paradigm). Differences here are expected; each row is annotated with why, so a
+# difference can be checked against that paradigm's own model instead of assumed to be a bug.
+COMPARISON = [
+    ("alice", "POST", "/storage/write", {"key": "finance/a.txt", "content": "x"},
+     "alice: finance dept, level 2. Only ABAC permits (own-department rule). RBAC (auditor is "
+     "read-only), Claims (grant is r:finance/, read-only), ACL (only erin is listed for "
+     "finance/), ReBAC (finance/ was never modeled here), and OPA/Cedar (the department derived "
+     "from this path shape doesn't match alice's) all deny."),
+    ("carol", "POST", "/storage/read", {"key": "shared/notes.txt"},
+     "carol: hr dept, level 1. RBAC (viewer covers shared/), ACL (wildcard * on shared/), ReBAC "
+     "(user:* viewer wildcard tuple), and OPA/Cedar (default public classification, level 1 >= "
+     "1) all permit. ABAC (no rule covers shared/) and Claims (grant is r:hr/) deny — neither "
+     "has a concept of public access outside its own modeled prefixes."),
+]
+
+print("\n=== Cross-paradigm consistency (informational, not pass/fail) ===")
+for user, method, path, body, annotation in COMPARISON:
+    print(f"\n{user} {method} {path} {body}\n  {annotation}")
+    tok = token(user)
+    for paradigm in ["rbac", "abac", "claims", "acl", "rebac", "opa", "cedar"]:
+        status, resp = call(method, path, tok, paradigm, body)
+        permit = resp.get("permit", status == 200)
+        print(f"  {paradigm:8} permit={permit!s:5} {resp.get('reason', '')}")
+
 sys.exit(1 if fails else 0)
