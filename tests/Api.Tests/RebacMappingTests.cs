@@ -38,4 +38,17 @@ public class RebacMappingTests
     [Fact]
     public void User_name_maps_to_user_object() =>
         Assert.Equal("user:carol", RebacEvaluator.UserObject("carol"));
+
+    [Fact]
+    public void ModeledPrefixes_contains_every_prefix_wired_into_a_tuple()
+    {
+        var expected = new HashSet<string>
+        {
+            "prefix:projects/",
+            "prefix:projects/apollo/",
+            "prefix:projects/apollo/specs/",
+            "prefix:shared/",
+        };
+        Assert.Equal(expected, RebacSeeder.ModeledPrefixes);
+    }
 }
