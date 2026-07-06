@@ -69,9 +69,15 @@ vs ABAC's per-attribute model:
 
 **Header-without-role** (OPA, Cedar): complements the existing "role-without-header" case
 (carol, no header):
-- `dave, opa, read classified/x` with `X-Break-Glass: true` → deny (dave lacks
+- `alice, opa, read classified/x` with `X-Break-Glass: true` → deny (alice lacks
   `incident_responder`).
 - same for `cedar`.
+- **Correction (caught during implementation, 2026-07-06):** this originally specified `dave`.
+  That's wrong — dave's level (4) already exceeds the classified threshold (3), so the plain
+  clearance rule permits him regardless of the header, and the case would test nothing. `alice`
+  (level 2, no `incident_responder` role) genuinely fails both the clearance rule and the
+  break-glass rule, so she's the only caller who actually isolates this combination. See the
+  implementation plan's note on the same fix.
 
 **Untested classification tier** (OPA, Cedar): the matrix currently only exercises the
 `classified` tier (level 3) boundary; `internal` (level 2) has no read case at all:
