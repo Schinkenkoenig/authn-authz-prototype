@@ -99,8 +99,8 @@ CASES = [
     # Untested classification tier: 'internal' (level 2) had no read case at all.
     ("alice", "opa",   "POST", "/storage/read", {"key": "internal/x"}, True),                           # level 2 >= 2, exact boundary
     ("carol", "opa",   "POST", "/storage/read", {"key": "internal/x"}, False),                          # level 1 < 2
-    ("alice", "cedar", "POST", "/storage/read", {"key": "internal/x"}, True),
-    ("carol", "cedar", "POST", "/storage/read", {"key": "internal/x"}, False),
+    ("alice", "cedar", "POST", "/storage/read", {"key": "internal/x"}, True),                            # level 2 >= 2, exact boundary
+    ("carol", "cedar", "POST", "/storage/read", {"key": "internal/x"}, False),                           # level 1 < 2
 ]
 
 fails = 0
