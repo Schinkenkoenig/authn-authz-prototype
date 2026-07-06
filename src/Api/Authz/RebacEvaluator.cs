@@ -31,11 +31,12 @@ public static class RebacEvaluator
         var obj = PrefixObject(resource);
 
         var allowed = await client.CheckAsync(user, relation, obj, ct);
-        return new AuthzDecision(
-            allowed,
-            allowed
-                ? $"OpenFGA: {user} has {relation} on {obj}"
-                : $"OpenFGA: {user} lacks {relation} on {obj}",
-            "rebac");
+        if (allowed)
+            return new(true, $"OpenFGA: {user} has {relation} on {obj}", "rebac");
+
+        var reason = RebacSeeder.ModeledPrefixes.Contains(obj)
+            ? $"OpenFGA: {user} lacks {relation} on {obj}"
+            : $"OpenFGA: {obj} has no seeded tuple at this depth (unmodeled — not a policy decision)";
+        return new(false, reason, "rebac");
     }
 }

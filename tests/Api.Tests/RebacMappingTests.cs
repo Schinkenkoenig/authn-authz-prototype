@@ -1,3 +1,4 @@
+using Api.Auth;
 using Api.Authz;
 
 namespace Api.Tests;
@@ -50,5 +51,49 @@ public class RebacMappingTests
             "prefix:shared/",
         };
         Assert.Equal(expected, RebacSeeder.ModeledPrefixes);
+    }
+
+    sealed class StubRebac(bool allowed) : IRebacClient
+    {
+        public Task<bool> CheckAsync(string user, string relation, string obj, CancellationToken ct) =>
+            Task.FromResult(allowed);
+    }
+
+    static CallerClaims Caller(string name) =>
+        new("sub", name, [], new Dictionary<string, string>(), []);
+
+    [Fact]
+    public async Task Deny_reason_for_a_modeled_prefix_says_the_user_lacks_the_relation()
+    {
+        var d = await RebacEvaluator.EvaluateAsync(
+            Caller("carol"), StorageAction.Write, "projects/apollo/a.txt",
+            new StubRebac(false), CancellationToken.None);
+
+        Assert.False(d.Permit);
+        Assert.Equal("OpenFGA: user:carol lacks editor on prefix:projects/apollo/", d.Reason);
+    }
+
+    [Fact]
+    public async Task Deny_reason_for_an_unmodeled_prefix_flags_it_as_a_coverage_gap()
+    {
+        var d = await RebacEvaluator.EvaluateAsync(
+            Caller("bob"), StorageAction.Write, "projects/apollo/specs/deep/nested.txt",
+            new StubRebac(false), CancellationToken.None);
+
+        Assert.False(d.Permit);
+        Assert.Equal(
+            "OpenFGA: prefix:projects/apollo/specs/deep/ has no seeded tuple at this depth (unmodeled — not a policy decision)",
+            d.Reason);
+    }
+
+    [Fact]
+    public async Task Permit_reason_is_unchanged()
+    {
+        var d = await RebacEvaluator.EvaluateAsync(
+            Caller("carol"), StorageAction.Read, "projects/apollo/a.txt",
+            new StubRebac(true), CancellationToken.None);
+
+        Assert.True(d.Permit);
+        Assert.Equal("OpenFGA: user:carol has viewer on prefix:projects/apollo/", d.Reason);
     }
 }
