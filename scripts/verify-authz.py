@@ -76,6 +76,31 @@ CASES = [
     # list has no scenario rule under policy-as-code → deny (403 before touching S3, no unknown-action 500).
     ("bob",   "opa",   "GET",  "/storage/list",  None, False),
     ("bob",   "cedar", "GET",  "/storage/list",  None, False),
+    # --- Phase 2 review pass: edge/negative cases ---
+    # (see docs/superpowers/specs/2026-07-05-authz-review-pass-design.md)
+    # Correct-prefix-wrong-action: the resource matches, the specific action doesn't.
+    ("carol", "rbac",  "POST", "/storage/write", {"key": "shared/notes.txt", "content": "x"}, False),  # viewer: Read,List on shared/, not Write
+    ("dave",  "abac",  "POST", "/storage/read",  {"key": "hr/records.txt"}, True),                      # level 4 >= 3 grants Read
+    ("dave",  "abac",  "POST", "/storage/write", {"key": "hr/records.txt", "content": "x"}, False),     # level rule has no Write; dept 'it' != hr/
+    # Prefix-subtree boundary: same top segment, different subtree.
+    ("bob",   "claims", "POST", "/storage/read", {"key": "projects/other/x.txt"}, False),               # grant is rw:projects/apollo/, not projects/
+    # Identity-vs-attribute divergence: alice's department matches finance/ but she is not on the ACL.
+    ("alice", "acl",   "POST", "/storage/write", {"key": "finance/a.txt", "content": "x"}, False),      # only erin is listed for finance/
+    # Unmodeled depth: exercises the ReBAC observability fix (reason should say "unmodeled").
+    ("bob",   "rebac", "POST", "/storage/write", {"key": "projects/apollo/specs/deep/nested.txt", "content": "x"}, False),
+    # Header-without-role: the break-glass flag alone isn't enough without the incident_responder
+    # role. NOTE: must use a caller who ALSO fails plain clearance (level < 3) — otherwise the
+    # ordinary clearance rule permits regardless of the header, and the case tests nothing. alice
+    # is level 2 with no incident_responder role, so both rule 1 (clearance) and rule 3
+    # (break-glass) correctly fail here. (dave is level 4 and would wrongly permit via rule 1
+    # alone, masking whether the header/role combination is doing anything.)
+    ("alice", "opa",   "POST", "/storage/read", {"key": "classified/x"}, False, {"X-Break-Glass": "true"}),
+    ("alice", "cedar", "POST", "/storage/read", {"key": "classified/x"}, False, {"X-Break-Glass": "true"}),
+    # Untested classification tier: 'internal' (level 2) had no read case at all.
+    ("alice", "opa",   "POST", "/storage/read", {"key": "internal/x"}, True),                           # level 2 >= 2, exact boundary
+    ("carol", "opa",   "POST", "/storage/read", {"key": "internal/x"}, False),                          # level 1 < 2
+    ("alice", "cedar", "POST", "/storage/read", {"key": "internal/x"}, True),                            # level 2 >= 2, exact boundary
+    ("carol", "cedar", "POST", "/storage/read", {"key": "internal/x"}, False),                           # level 1 < 2
 ]
 
 fails = 0
@@ -89,4 +114,32 @@ for case in CASES:
     fails += 0 if ok else 1
 
 print(f"\n{'ALL PASS' if fails == 0 else str(fails)+' FAILED'}")
+
+# Cross-paradigm consistency (informational only — does not affect the exit code). Same
+# (user, action, resource) tuple run through every paradigm's OWN existing demo data — NOT the
+# apples-to-apples scenario (that's separate future work, one fixed scenario authored identically
+# under every paradigm). Differences here are expected; each row is annotated with why, so a
+# difference can be checked against that paradigm's own model instead of assumed to be a bug.
+COMPARISON = [
+    ("alice", "POST", "/storage/write", {"key": "finance/a.txt", "content": "x"},
+     "alice: finance dept, level 2. Only ABAC permits (own-department rule). RBAC (auditor is "
+     "read-only), Claims (grant is r:finance/, read-only), ACL (only erin is listed for "
+     "finance/), ReBAC (finance/ was never modeled here), and OPA/Cedar (the department derived "
+     "from this path shape doesn't match alice's) all deny."),
+    ("carol", "POST", "/storage/read", {"key": "shared/notes.txt"},
+     "carol: hr dept, level 1. RBAC (viewer covers shared/), ACL (wildcard * on shared/), ReBAC "
+     "(user:* viewer wildcard tuple), and OPA/Cedar (default public classification, level 1 >= "
+     "1) all permit. ABAC (no rule covers shared/) and Claims (grant is r:hr/) deny — neither "
+     "has a concept of public access outside its own modeled prefixes."),
+]
+
+print("\n=== Cross-paradigm consistency (informational, not pass/fail) ===")
+for user, method, path, body, annotation in COMPARISON:
+    print(f"\n{user} {method} {path} {body}\n  {annotation}")
+    tok = token(user)
+    for paradigm in ["rbac", "abac", "claims", "acl", "rebac", "opa", "cedar"]:
+        status, resp = call(method, path, tok, paradigm, body)
+        permit = resp.get("permit", status == 200)
+        print(f"  {paradigm:8} permit={permit!s:5} {resp.get('reason', '')}")
+
 sys.exit(1 if fails else 0)

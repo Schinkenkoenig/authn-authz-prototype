@@ -22,4 +22,12 @@ public static class RebacSeeder
         new("user:alice",              "owner",  "prefix:projects/apollo/"),        // owner ⇒ editor
         new("user:*",                  "viewer", "prefix:shared/"),                  // public read
     ];
+
+    // Every prefix object that appears anywhere in the seeded graph (either side of a tuple).
+    // A resource whose containing prefix falls outside this set was never wired into the graph —
+    // its Check() result is a coverage gap, not a policy decision. See RebacEvaluator.
+    public static readonly IReadOnlySet<string> ModeledPrefixes = Tuples
+        .SelectMany(t => new[] { t.User, t.Object })
+        .Where(s => s.StartsWith("prefix:", StringComparison.Ordinal))
+        .ToHashSet();
 }
