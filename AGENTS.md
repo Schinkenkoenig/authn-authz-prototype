@@ -19,11 +19,12 @@ security posture — effective access is the UNION across paradigms by design.
 
 ## Agent memory → collector issue
 
-The agent keeps project memory in a private, per-user store outside the repo. That memory is
-**mirrored into a single tracker issue — [Agent memory collector #7](https://github.com/Schinkenkoenig/authn-authz-prototype/issues/7)**
-— so it is visible in the repo and durable across machines. **Whenever you write, update, or delete a
-memory, reflect the change in #7 in the same session.** The local memory files stay the source of
-truth; #7 is the shared mirror.
+The agent keeps project memory in a private, per-user store outside the repo. A single tracker issue —
+**[Agent memory collector #7](https://github.com/Schinkenkoenig/authn-authz-prototype/issues/7)** —
+holds a lightweight **index** of it (one line per memory), so what the memory covers is visible in the
+repo. **When you add, rename, or delete a memory, add/update/remove its line in #7 in the same
+session.** Content edits that don't change a memory's one-line hook need no update there. The local
+memory files stay the source of truth; #7 is only the index.
 
 ## Layout
 
