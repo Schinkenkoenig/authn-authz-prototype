@@ -26,6 +26,31 @@ repo. **When you add, rename, or delete a memory, add/update/remove its line in 
 session.** Content edits that don't change a memory's one-line hook need no update there. The local
 memory files stay the source of truth; #7 is only the index.
 
+## Feature tracking → milestones + linked projects
+
+A **feature** is a full capability that spans multiple issues/tasks (e.g. the *comparison wiki*). The
+tracking flow is fixed:
+
+1. **One milestone per feature** — every issue/task for the feature is assigned to it, so the
+   milestone's open/closed rollup is the feature's progress. Create with
+   `gh api repos/Schinkenkoenig/authn-authz-prototype/milestones -f title="<feature>"`.
+2. **One Project (v2) per milestone** — the Kanban board that tracks that feature's issues. The board
+   and its milestone share the feature name. `gh project create --owner Schinkenkoenig --title "<feature>"`.
+3. **Link the project to this repo** — so it shows under the repo's *Projects* tab:
+   `gh project link <n> --owner Schinkenkoenig --repo Schinkenkoenig/authn-authz-prototype`.
+
+Worked example: the milestone **Full comparison wiki** + its linked project
+[users/Schinkenkoenig/projects/1](https://github.com/users/Schinkenkoenig/projects/1).
+
+Gotchas (all cost time once):
+- **Projects v2 are user/org-owned, never repo-owned.** Creating one does *not* attach it to the repo —
+  the explicit `gh project link` in step 3 is what makes it appear under the repo's Projects tab.
+- **The `project` token scope is required** for any `gh project` write. The default token lacks it:
+  `gh auth refresh -s project` (interactive device login).
+- **`gh` can't set a view's layout.** A fresh project opens in *Table* layout; flip the view to *Board*
+  grouped by **Status** in the UI once. The CLI *can* set the Status field per item
+  (`gh project item-edit … --single-select-option-id`, options Todo / In Progress / Done).
+
 ## Layout
 
 ```
