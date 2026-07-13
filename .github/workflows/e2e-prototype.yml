@@ -1,0 +1,97 @@
+# Throwaway prototype for wayfinder ticket #21: prove the full E2E lane
+# (fixed-IP infra + Aspire app tier + verify-authz matrix + Playwright page-load)
+# runs green on a GitHub-hosted runner. Not a permanent workflow.
+name: e2e-prototype
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [prototype/21-e2e-ci-lane]
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Runner facts
+        run: |
+          df -h /
+          free -h
+          docker info --format 'docker {{.ServerVersion}}, driver {{.Driver}}'
+
+      - name: Infra up (dev-up.sh)
+        run: bash scripts/dev-up.sh
+
+      - name: npm ci (SPA)
+        working-directory: src/web
+        run: npm ci
+
+      - name: Start Aspire app tier (pinned ports)
+        run: |
+          ASPIRE_ALLOW_UNSECURED_TRANSPORT=true DOTNET_ENVIRONMENT=Development \
+            nohup dotnet run --project src/AppHost --launch-profile http \
+            -- --DcpPublisher:RandomizePorts=false > apphost.log 2>&1 &
+          echo "waiting for API on :5198"
+          for i in $(seq 1 120); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:5198/authz/paradigms || true)
+            if [ "$code" = "401" ] || [ "$code" = "200" ]; then
+              echo "API up ($code) after ~$((i*3))s"; exit 0
+            fi
+            sleep 3
+          done
+          echo "API never came up"; tail -100 apphost.log; exit 1
+
+      - name: Wait for SPA on :3000
+        run: |
+          for i in $(seq 1 100); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 http://localhost:3000 || true)
+            if [ "$code" = "200" ]; then echo "SPA up after ~$((i*3))s"; exit 0; fi
+            sleep 3
+          done
+          echo "SPA never came up"; tail -100 apphost.log; exit 1
+
+      - name: Seed read-target objects (fresh Ceph)
+        run: |
+          KC="http://172.30.0.20:8080/realms/authn-authz/protocol/openid-connect/token"
+          API="http://localhost:5198"
+          DAVE=$(curl -s -d client_id=webapp -d grant_type=password -d username=dave -d password=dave -d scope=openid "$KC" \
+            | python3 -c "import sys,json;print(json.load(sys.stdin)['access_token'])")
+          for key in "hr/records.txt" "shared/notes.txt" "projects/apollo/specs/design.md" "classified/x" "internal/x"; do
+            curl -sf -X POST "$API/storage/write" -H "Authorization: Bearer $DAVE" \
+              -H "X-Authz-Paradigm: rbac" -H "Content-Type: application/json" \
+              -d "{\"key\":\"$key\",\"content\":\"seed\"}" > /dev/null
+            echo "seeded $key"
+          done
+
+      - name: verify-authz matrix
+        run: python3 scripts/verify-authz.py http://localhost:5198
+
+      - name: Playwright page-load
+        working-directory: tests/e2e-prototype
+        run: |
+          npm install
+          npx playwright install --with-deps chromium
+          npx playwright test
+
+      - name: Diagnostics on failure
+        if: failure()
+        run: |
+          docker ps -a
+          df -h /
+          echo "== apphost.log =="; tail -200 apphost.log || true
+          for c in kc-spike ceph-demo openfga opa cedar-agent webid-refresher; do
+            echo "== $c =="; docker logs --tail 40 "$c" 2>&1 || true
+          done
+
+      - name: Upload apphost log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apphost-log-run${{ github.run_number }}-attempt${{ github.run_attempt }}
+          path: apphost.log
