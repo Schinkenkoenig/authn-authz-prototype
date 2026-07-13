@@ -12,8 +12,10 @@ Playwright Chromium once per machine:
 npx playwright install chromium
 ```
 
-Dev server only for now — no hosting target, no deploy pipeline, no CI
-([#16](https://github.com/Schinkenkoenig/authn-authz-prototype/issues/16)).
+Published at **<https://schinkenkoenig.github.io/authn-authz-prototype/>** — the
+`deploy-wiki.yml` workflow builds and deploys on every push to `main` touching `docs/wiki/` or
+`src/wiki/`. Test CI (Playwright) stays deferred
+([#11](https://github.com/Schinkenkoenig/authn-authz-prototype/issues/11)).
 
 ```
 npm install

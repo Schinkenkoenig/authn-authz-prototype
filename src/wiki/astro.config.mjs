@@ -5,6 +5,8 @@ import rehypeMermaid from 'rehype-mermaid';
 
 // https://astro.build/config
 export default defineConfig({
+	site: 'https://schinkenkoenig.github.io',
+	base: '/authn-authz-prototype',
 	markdown: {
 		// Mermaid code blocks are rendered to SVG at build time (no client-side JS).
 		rehypePlugins: [rehypeMermaid],

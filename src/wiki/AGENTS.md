@@ -4,7 +4,11 @@ The paradigm-comparison wiki site. **Content lives in the repo's `docs/wiki/`, n
 docs collection in `src/content.config.ts` globs `../../docs/wiki`; edit the markdown there, never
 fork it into `src/content/`. Starlight needs frontmatter (`title`, optional `slug`) on those files.
 `rehype-mermaid` renders mermaid blocks to SVG at build time and needs a one-time
-`npx playwright install chromium`. Dev server only — no hosting/deploy/CI (issue #16).
+`npx playwright install chromium`. Deployed to GitHub Pages
+(https://schinkenkoenig.github.io/authn-authz-prototype/) by `.github/workflows/deploy-wiki.yml` on
+push to `main`; test CI (Playwright, issue #11) stays deferred. Because of the Pages `base` path,
+links in the wiki markdown to repo files outside `docs/wiki/` must be absolute GitHub blob URLs —
+relative `../` links 404 on the published site.
 
 ## Development
 
