@@ -1,4 +1,7 @@
-# Authorization paradigm comparison
+---
+title: Authorization paradigm comparison
+slug: index
+---
 
 Seven interchangeable authorization paradigms decide the **same** storage-access question —
 `read` / `write` / `list` on an object key — in this testbed. This page compares them along a fixed

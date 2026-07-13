@@ -68,6 +68,7 @@ src/Api/           FastEndpoints API — the PDP + PEP. Authenticates the caller
 src/AppHost/       .NET Aspire orchestrator — runs Postgres + API + SPA; holds realm + Ceph init
 src/ServiceDefaults/  shared Aspire wiring (OTel, health)
 src/web/           Next.js SPA (Auth Code + PKCE via react-oidc-context)
+src/wiki/          Astro + Starlight comparison wiki — serves docs/wiki/ markdown; dev server only
 tests/Api.Tests/   unit tests — the pure evaluators + dispatch + claims parsing
 scripts/           dev-up.sh (infra) + verify-authz.py (the paradigm matrix)
 ```
