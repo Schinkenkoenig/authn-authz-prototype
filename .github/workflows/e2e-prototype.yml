@@ -59,6 +59,17 @@ jobs:
           done
           echo "SPA never came up"; tail -100 apphost.log; exit 1
 
+      - name: STS sanity — raw AssumeRoleWithWebIdentity against RGW
+        run: |
+          ls -la /tmp/webid/ || true
+          echo "token claims:"
+          cut -d. -f2 < /tmp/webid/token | base64 -d 2>/dev/null | python3 -m json.tool || true
+          aws sts assume-role-with-web-identity \
+            --endpoint-url http://172.30.0.10:8080 --region us-east-1 \
+            --role-arn "arn:aws:iam:::role/DemoService" --role-session-name ci-sanity \
+            --web-identity-token "file:///tmp/webid/token" \
+            --query 'Credentials.Expiration' --output text || echo "RAW STS CALL FAILED (see error above)"
+
       - name: Seed read-target objects (fresh Ceph)
         run: |
           KC="http://172.30.0.20:8080/realms/authn-authz/protocol/openid-connect/token"
