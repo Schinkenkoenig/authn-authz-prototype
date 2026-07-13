@@ -17,6 +17,11 @@ security posture — effective access is the UNION across paradigms by design.
 - **Per-subproject history** (specs, plans, run notes) → [docs/superpowers/](docs/superpowers/).
 - **The SPA** has its own [src/web/AGENTS.md](src/web/AGENTS.md) — heed it; that Next.js is not the one you know.
 
+## Merging → pull requests only
+
+**All merges to `main` go through a pull request** — never merge locally into `main` or push to it
+directly, even for docs-only changes. Branch, push, `gh pr create`, merge the PR.
+
 ## Agent memory → collector issue
 
 The agent keeps project memory in a private, per-user store outside the repo. A single tracker issue —
