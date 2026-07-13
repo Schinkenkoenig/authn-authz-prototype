@@ -28,9 +28,12 @@ jobs:
       - name: Infra up (dev-up.sh)
         run: bash scripts/dev-up.sh
 
-      - name: npm ci (SPA)
+      # npm ci fails here: the committed lockfile misses @emnapi/* optional-dep entries on the
+      # runner's node/npm even after a local regeneration (finding for the ticket). npm install
+      # unblocks the prototype; lockfile hygiene is the real lane's problem.
+      - name: npm install (SPA)
         working-directory: src/web
-        run: npm ci
+        run: npm install
 
       - name: Start Aspire app tier (pinned ports)
         run: |
