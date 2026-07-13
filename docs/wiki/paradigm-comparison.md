@@ -1,15 +1,18 @@
-# Authorization paradigm comparison
+---
+title: Authorization paradigm comparison
+slug: index
+---
 
 Seven interchangeable authorization paradigms decide the **same** storage-access question —
 `read` / `write` / `list` on an object key — in this testbed. This page compares them along a fixed
 six-axis schema so their configuration burden and expressiveness can be read side by side.
 
 The live seeded configuration and worked decision examples for every paradigm are in
-[authz-paradigms.md](../authz-paradigms.md); this page compares, that page demonstrates. The
+[authz-paradigms.md](https://github.com/Schinkenkoenig/authn-authz-prototype/blob/main/docs/authz-paradigms.md); this page compares, that page demonstrates. The
 **apples-to-apples view** — one fixed scenario expressed under every paradigm — is a separate view,
 not part of this comparison. Security caveat: the caller picks the paradigm per request, so
 effective access is the UNION across paradigms by design
-([ADR 0005](../adr/0005-caller-selected-paradigm-union-access.md)).
+([ADR 0005](https://github.com/Schinkenkoenig/authn-authz-prototype/blob/main/docs/adr/0005-caller-selected-paradigm-union-access.md)).
 
 ## How to read the axes
 
@@ -29,7 +32,7 @@ effective access is the UNION across paradigms by design
   enterprise IdP **already maintains** (security groups, HR-fed departments, profile attributes),
   and how easily the paradigm taps it. Leverage of *pre-existing* config, not migration of ours.
   Full analysis with primary sources:
-  [Enterprise-IdP leverage per paradigm](../research/2026-07-11-entra-idp-leverage-per-paradigm.md).
+  [Enterprise-IdP leverage per paradigm](https://github.com/Schinkenkoenig/authn-authz-prototype/blob/main/docs/research/2026-07-11-entra-idp-leverage-per-paradigm.md).
 - **Upsides / Downsides** — the trade-offs, closed by a **sweet spot / worst fit** verdict.
 
 ## Overview matrix
