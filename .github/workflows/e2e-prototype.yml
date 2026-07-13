@@ -66,10 +66,17 @@ jobs:
           DAVE=$(curl -s -d client_id=webapp -d grant_type=password -d username=dave -d password=dave -d scope=openid "$KC" \
             | python3 -c "import sys,json;print(json.load(sys.stdin)['access_token'])")
           for key in "hr/records.txt" "shared/notes.txt" "projects/apollo/specs/design.md" "classified/x" "internal/x"; do
-            curl -sf -X POST "$API/storage/write" -H "Authorization: Bearer $DAVE" \
-              -H "X-Authz-Paradigm: rbac" -H "Content-Type: application/json" \
-              -d "{\"key\":\"$key\",\"content\":\"seed\"}" > /dev/null
-            echo "seeded $key"
+            ok=false
+            for attempt in 1 2 3 4 5; do
+              body=$(curl -s -w '\n%{http_code}' -X POST "$API/storage/write" -H "Authorization: Bearer $DAVE" \
+                -H "X-Authz-Paradigm: rbac" -H "Content-Type: application/json" \
+                -d "{\"key\":\"$key\",\"content\":\"seed\"}")
+              code=${body##*$'\n'}
+              echo "seed $key attempt $attempt -> $code :: ${body%$'\n'*}"
+              [ "$code" = "200" ] && { ok=true; break; }
+              sleep 5
+            done
+            [ "$ok" = "true" ] || { echo "seeding $key failed"; exit 1; }
           done
 
       - name: verify-authz matrix
